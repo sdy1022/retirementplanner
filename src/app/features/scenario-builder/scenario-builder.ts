@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { LocalStateService } from '../../core/services/local-state.service';
-import { RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
+import { AccountSnapshot, RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -46,6 +46,9 @@ import { RothConversionStrategy, Scenario } from '../../core/models/retirement.m
           </mat-form-field>
           <mat-form-field><mat-label>Fixed amount</mat-label><input matInput type="number" formControlName="fixedAmount" /></mat-form-field>
           <mat-form-field><mat-label>Target bracket</mat-label><input matInput type="number" step="0.01" formControlName="targetBracket" /></mat-form-field>
+          <mat-form-field><mat-label>Traditional Balance</mat-label><input matInput type="number" formControlName="traditionalBalance" /></mat-form-field>
+          <mat-form-field><mat-label>Roth Balance</mat-label><input matInput type="number" formControlName="rothBalance" /></mat-form-field>
+          <mat-form-field><mat-label>Brokerage Balance</mat-label><input matInput type="number" formControlName="brokerageBalance" /></mat-form-field>
           <button mat-flat-button type="submit" [disabled]="form.invalid">Run Scenario</button>
         </form>
       </mat-card-content>
@@ -61,6 +64,11 @@ import { RothConversionStrategy, Scenario } from '../../core/models/retirement.m
 export class ScenarioBuilder {
   private readonly state = inject(LocalStateService);
   private readonly fb = inject(FormBuilder);
+
+  private getBalance(types: string[]): number {
+    return this.state.accounts().filter(a => types.includes(a.type)).reduce((sum, a) => sum + a.balance, 0);
+  }
+
   readonly form = this.fb.nonNullable.group({
     name: [this.state.scenario().name, Validators.required],
     currentAge: [this.state.scenario().currentAge, Validators.required],
@@ -76,6 +84,9 @@ export class ScenarioBuilder {
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [25000],
     targetBracket: [0.22],
+    traditionalBalance: [this.getBalance(['traditional_401k', 'traditional_ira']), Validators.required],
+    rothBalance: [this.getBalance(['roth_401k', 'roth_ira']), Validators.required],
+    brokerageBalance: [this.getBalance(['brokerage']), Validators.required],
   });
 
   save(): void {
@@ -106,6 +117,14 @@ export class ScenarioBuilder {
       assumedReturnRate: value.assumedReturnRate,
       stateTaxRate: value.stateTaxRate,
     };
+
+    const now = new Date().toISOString().split('T')[0];
+    this.state.setAccounts([
+      { type: 'traditional_ira', balance: value.traditionalBalance, snapshotDate: now },
+      { type: 'roth_ira', balance: value.rothBalance, snapshotDate: now },
+      { type: 'brokerage', balance: value.brokerageBalance, snapshotDate: now },
+    ]);
+
     this.state.updateScenario(scenario);
   }
 }

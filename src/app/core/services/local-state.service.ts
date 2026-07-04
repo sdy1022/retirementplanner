@@ -2,15 +2,15 @@ import { Injectable, signal } from '@angular/core';
 import { AccountSnapshot, Scenario } from '../models/retirement.models';
 
 const defaultAccounts: AccountSnapshot[] = [
-  { type: 'traditional_401k', balance: 1600000, snapshotDate: '2026-07-02' },
+  { type: 'traditional_401k', balance: 1000000, snapshotDate: '2026-07-02' },
   { type: 'roth_ira', balance: 500000, snapshotDate: '2026-07-02' },
   { type: 'traditional_ira', balance: 500000, snapshotDate: '2026-07-02' },
   { type: 'brokerage', balance: 500000, snapshotDate: '2026-07-02' },
 ];
 
 const defaultScenario: Scenario = {
-  name: 'Smooth to 24% bracket',
-  currentAge: 52,
+  name: 'Smooth income target',
+  currentAge: 53,
   retirementAge: 60,
   birthYear: 1973,
   ssClaimAge: 67,
@@ -30,6 +30,10 @@ export class LocalStateService {
 
   addAccount(account: AccountSnapshot): void {
     this.accounts.update((accounts) => [...accounts, account]);
+  }
+
+  setAccounts(accounts: AccountSnapshot[]): void {
+    this.accounts.set(accounts);
   }
 
   updateScenario(scenario: Scenario): void {
