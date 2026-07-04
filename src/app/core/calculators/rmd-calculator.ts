@@ -1,5 +1,9 @@
 import { RmdYearEntry } from '../models/retirement.models';
 import { roundCurrency } from './tax-bracket-calculator';
+// will need to get this value from resources/assets/uniform-lifetime-divisors.json
+// Pub. 590-B, Accounts Subject to Required Minimum Distributions
+// https://www.irs.gov/pub/irs-pdf/p590b.pdf
+// Page 38 has the table
 
 export const UNIFORM_LIFETIME_DIVISORS: Record<number, number> = {
   73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9, 78: 22.0, 79: 21.1, 80: 20.2,
