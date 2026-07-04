@@ -33,7 +33,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
     const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;
-    const baseTaxableIncome = currentWage + (input.annualOtherIncome ?? 0) + ssIncome + rmd;
+    const taxableSsIncome = roundCurrency(ssIncome * 0.85);
+    const baseTaxableIncome = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd;
     
     // Only convert if retired (since in working years wages likely fill low brackets)
     const conversion = isRetired ? Math.min(traditionalBalance - rmd, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, input.taxYear ?? 2026, age, rmdStartAge)) : 0;

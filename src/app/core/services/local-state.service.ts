@@ -13,7 +13,7 @@ const defaultScenario: Scenario = {
   currentAge: 52,
   retirementAge: 60,
   birthYear: 1973,
-  ssClaimAge: 62,
+  ssClaimAge: 67,
   ssPia: 2200,
   lifeExpectancy: 90,
   filingStatus: 'married_filing_jointly',
