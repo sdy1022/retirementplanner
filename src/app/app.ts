@@ -23,6 +23,10 @@ import { MatToolbarModule } from '@angular/material/toolbar';
           <mat-icon>tune</mat-icon>
           Scenario
         </a>
+        <a mat-button href="/runningsteps.html" target="_blank">
+          <mat-icon>help</mat-icon>
+          Help
+        </a>
         <a mat-button routerLink="/login" routerLinkActive="active-link">
           <mat-icon>login</mat-icon>
           Login

@@ -25,18 +25,40 @@ const defaultScenario: Scenario = {
 
 @Injectable({ providedIn: 'root' })
 export class LocalStateService {
-  readonly accounts = signal<AccountSnapshot[]>(defaultAccounts);
-  readonly scenario = signal<Scenario>(defaultScenario);
+  readonly accounts = signal<AccountSnapshot[]>(this.loadAccounts());
+  readonly scenario = signal<Scenario>(this.loadScenario());
+
+  private loadAccounts(): AccountSnapshot[] {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('accounts');
+      if (saved) return JSON.parse(saved);
+    }
+    return defaultAccounts;
+  }
+
+  private loadScenario(): Scenario {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('scenario');
+      if (saved) return JSON.parse(saved);
+    }
+    return defaultScenario;
+  }
 
   addAccount(account: AccountSnapshot): void {
-    this.accounts.update((accounts) => [...accounts, account]);
+    this.accounts.update((accounts) => {
+      const updated = [...accounts, account];
+      if (typeof localStorage !== 'undefined') localStorage.setItem('accounts', JSON.stringify(updated));
+      return updated;
+    });
   }
 
   setAccounts(accounts: AccountSnapshot[]): void {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('accounts', JSON.stringify(accounts));
     this.accounts.set(accounts);
   }
 
   updateScenario(scenario: Scenario): void {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('scenario', JSON.stringify(scenario));
     this.scenario.set(scenario);
   }
 }
