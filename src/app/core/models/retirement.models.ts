@@ -40,6 +40,7 @@ export interface Scenario {
   assumedReturnRate: number;
   stateTaxRate: number;
   wageIncome: number;
+  annualLivingExpenses: number;
 }
 
 export interface RmdYearEntry {

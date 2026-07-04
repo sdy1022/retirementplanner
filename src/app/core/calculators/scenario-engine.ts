@@ -1,8 +1,7 @@
 import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy } from './roth-conversion-calculator';
 import { getTaxTable } from './tax-tables';
-import { calculateRequiredFlatConversion, calculateMaxTraditionalBalanceForBracket } from './action-plan';
-import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
+import { getRmdStartAge } from './rmd-calculator';
 
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
   const runWithStrategy = (strategy: RothConversionStrategy) => {
@@ -16,6 +15,7 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
       assumedReturnRate: scenario.assumedReturnRate,
       stateTaxRate: scenario.stateTaxRate,
       wageIncome: scenario.wageIncome,
+      annualLivingExpenses: scenario.annualLivingExpenses,
       retirementAge: scenario.retirementAge,
       ssPia: scenario.ssPia,
       ssClaimAge: scenario.ssClaimAge,

@@ -21,6 +21,7 @@ const defaultScenario: Scenario = {
   assumedReturnRate: 0.08,
   stateTaxRate: 0.0495,
   wageIncome: 180000,
+  annualLivingExpenses: 120000,
 };
 
 @Injectable({ providedIn: 'root' })

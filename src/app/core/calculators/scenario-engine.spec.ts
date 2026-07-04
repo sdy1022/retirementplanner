@@ -16,6 +16,7 @@ describe('scenario-engine', () => {
       assumedReturnRate: 0,
       stateTaxRate: 0,
       wageIncome: 0,
+      annualLivingExpenses: 0,
     };
 
     const result = runScenario(scenario, [{ type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' }]);
@@ -41,6 +42,7 @@ describe('scenario-engine', () => {
       assumedReturnRate: 0.05,
       stateTaxRate: 0.03,
       wageIncome: 0,
+      annualLivingExpenses: 0,
     };
 
     const result = runScenario(scenario, [
@@ -57,8 +59,8 @@ describe('scenario-engine', () => {
     expect(y60.conversion).toBeGreaterThan(0);
     expect(y61.taxableIncome).toBe(y60.taxableIncome);
     expect(y62.taxableIncome).toBe(y61.taxableIncome);
-    // ...because the conversion drops by exactly the annual SS benefit ($2,800 * 12).
-    expect(y61.conversion - y62.conversion).toBe(33600);
+    // ...because the conversion drops by exactly the taxable portion of the annual SS benefit ($2,800 * 12 * 0.85).
+    expect(y61.conversion - y62.conversion).toBe(28560);
 
     // Every RMD year lands at or below the target bracket.
     const rmdYears = result.years.filter(y => y.rmd > 0);
@@ -66,5 +68,34 @@ describe('scenario-engine', () => {
     for (const year of rmdYears) {
       expect(year.marginalRate).toBeLessThanOrEqual(0.24);
     }
+  });
+
+  it('withdraws annual living expenses from the brokerage account', () => {
+    const scenario: Scenario = {
+      name: 'Living expenses',
+      currentAge: 60,
+      retirementAge: 60,
+      birthYear: 1966,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 61,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 30000,
+    };
+
+    // Zero cost basis: every withdrawn dollar is gain, taxed at 15% federal ($4,500/yr on $30k).
+    const allGain = runScenario(scenario, [{ type: 'brokerage', balance: 100000, costBasis: 0, snapshotDate: '2026-01-01' }]);
+    expect(allGain.totalTax).toBe(9000);
+    expect(allGain.years[0].endingAssets).toBe(65500);
+    expect(allGain.endingAssets).toBe(31000);
+
+    // Full cost basis (default when omitted): withdrawals are return of principal, no tax.
+    const allPrincipal = runScenario(scenario, [{ type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' }]);
+    expect(allPrincipal.totalTax).toBe(0);
+    expect(allPrincipal.endingAssets).toBe(40000);
   });
 });

@@ -133,13 +133,14 @@ export class Dashboard {
 
     // Drain-down solver
     const strategy = this.state.scenario().rothConversionStrategy;
-    const targetBracket = strategy.mode === 'fill-to-bracket'
+    const targetBracket = 'targetBracket' in strategy
       ? strategy.targetBracket
       : 0.24; // Default to 24% for generic advice if auto-optimizing
 
     const rmdStartAge = getRmdStartAge(this.state.scenario().birthYear);
     const divisor = UNIFORM_LIFETIME_DIVISORS[rmdStartAge];
-    const ssIncome = this.state.scenario().ssPia * 12;
+    // Only 85% of Social Security is taxable, matching the simulation engine
+    const ssIncome = this.state.scenario().ssPia * 12 * 0.85;
     const maxBalance = calculateMaxTraditionalBalanceForBracket(targetBracket, ssIncome, divisor, this.state.scenario().filingStatus, 2026);
 
     if (maxBalance > 0) {

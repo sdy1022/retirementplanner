@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { LocalStateService } from '../../core/services/local-state.service';
-import { AccountSnapshot, RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
+import { RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -20,6 +20,7 @@ import { AccountSnapshot, RothConversionStrategy, Scenario } from '../../core/mo
           <mat-form-field><mat-label>Current age</mat-label><input matInput type="number" formControlName="currentAge" /></mat-form-field>
           <mat-form-field><mat-label>Retirement age</mat-label><input matInput type="number" formControlName="retirementAge" /></mat-form-field>
           <mat-form-field><mat-label>Current wage</mat-label><input matInput type="number" formControlName="wageIncome" /></mat-form-field>
+          <mat-form-field><mat-label>Annual expenses</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
           <mat-form-field><mat-label>Birth year</mat-label><input matInput type="number" formControlName="birthYear" /></mat-form-field>
           <mat-form-field><mat-label>SS claim age</mat-label><input matInput type="number" formControlName="ssClaimAge" /></mat-form-field>
           <mat-form-field><mat-label>Monthly PIA</mat-label><input matInput type="number" formControlName="ssPia" /></mat-form-field>
@@ -49,6 +50,7 @@ import { AccountSnapshot, RothConversionStrategy, Scenario } from '../../core/mo
           <mat-form-field><mat-label>Traditional Balance</mat-label><input matInput type="number" formControlName="traditionalBalance" /></mat-form-field>
           <mat-form-field><mat-label>Roth Balance</mat-label><input matInput type="number" formControlName="rothBalance" /></mat-form-field>
           <mat-form-field><mat-label>Brokerage Balance</mat-label><input matInput type="number" formControlName="brokerageBalance" /></mat-form-field>
+          <mat-form-field><mat-label>Brokerage Cost Basis</mat-label><input matInput type="number" formControlName="brokerageCostBasis" /></mat-form-field>
           <button mat-flat-button type="submit" [disabled]="form.invalid">Run Scenario</button>
         </form>
       </mat-card-content>
@@ -75,6 +77,7 @@ export class ScenarioBuilder {
     retirementAge: [this.state.scenario().retirementAge, Validators.required],
     birthYear: [this.state.scenario().birthYear, Validators.required],
     wageIncome: [this.state.scenario().wageIncome, Validators.required],
+    annualLivingExpenses: [this.state.scenario().annualLivingExpenses ?? 0, Validators.required],
     ssClaimAge: [this.state.scenario().ssClaimAge, Validators.required],
     ssPia: [this.state.scenario().ssPia, Validators.required],
     lifeExpectancy: [this.state.scenario().lifeExpectancy, Validators.required],
@@ -87,6 +90,7 @@ export class ScenarioBuilder {
     traditionalBalance: [this.getBalance(['traditional_401k', 'traditional_ira']), Validators.required],
     rothBalance: [this.getBalance(['roth_401k', 'roth_ira']), Validators.required],
     brokerageBalance: [this.getBalance(['brokerage']), Validators.required],
+    brokerageCostBasis: [this.state.accounts().find(a => a.type === 'brokerage')?.costBasis ?? this.getBalance(['brokerage']), Validators.required],
   });
 
   save(): void {
@@ -108,6 +112,7 @@ export class ScenarioBuilder {
       currentAge: value.currentAge,
       retirementAge: value.retirementAge,
       wageIncome: value.wageIncome,
+      annualLivingExpenses: value.annualLivingExpenses,
       birthYear: value.birthYear,
       ssClaimAge: value.ssClaimAge as Scenario['ssClaimAge'],
       ssPia: value.ssPia,
@@ -122,7 +127,7 @@ export class ScenarioBuilder {
     this.state.setAccounts([
       { type: 'traditional_ira', balance: value.traditionalBalance, snapshotDate: now },
       { type: 'roth_ira', balance: value.rothBalance, snapshotDate: now },
-      { type: 'brokerage', balance: value.brokerageBalance, snapshotDate: now },
+      { type: 'brokerage', balance: value.brokerageBalance, costBasis: value.brokerageCostBasis, snapshotDate: now },
     ]);
 
     this.state.updateScenario(scenario);

@@ -24,6 +24,7 @@ export class ScenarioService {
       assumedReturnRate: Number(row.assumed_return_rate),
       stateTaxRate: Number(row.state_tax_rate ?? 0),
       wageIncome: Number(row.wage_income ?? 0),
+      annualLivingExpenses: Number(row.annual_living_expenses ?? 0),
     }));
   }
 
@@ -42,6 +43,7 @@ export class ScenarioService {
       assumed_return_rate: scenario.assumedReturnRate,
       state_tax_rate: scenario.stateTaxRate,
       wage_income: scenario.wageIncome,
+      annual_living_expenses: scenario.annualLivingExpenses,
     });
   }
 
