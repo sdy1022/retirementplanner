@@ -1,4 +1,4 @@
-export type FilingStatus = 'single';
+export type FilingStatus = 'single' | 'married_filing_jointly';
 export type AccountType = 'traditional_401k' | 'traditional_ira' | 'roth_401k' | 'roth_ira' | 'brokerage';
 
 export interface AccountSnapshot {
@@ -18,8 +18,12 @@ export interface TaxBracket {
 
 export type RothConversionStrategy =
   | { mode: 'none' }
-  | { mode: 'fixed-amount'; amount: number }
-  | { mode: 'fill-to-bracket'; targetBracket: number };
+  | { mode: 'fixed-amount'; amount: number; stopAtRmdAge?: boolean }
+  | { mode: 'fill-to-bracket'; targetBracket: number }
+  | { mode: 'smooth-to-bracket'; targetBracket: number }
+  | { mode: 'fill-to-income'; targetIncome: number; stopAtRmdAge?: boolean }
+  | { mode: 'smooth-income-target'; targetBracket: number }
+  | { mode: 'auto-optimize' };
 
 export interface Scenario {
   id?: string;
@@ -35,6 +39,7 @@ export interface Scenario {
   rothConversionStrategy: RothConversionStrategy;
   assumedReturnRate: number;
   stateTaxRate: number;
+  wageIncome: number;
 }
 
 export interface RmdYearEntry {
@@ -55,6 +60,7 @@ export interface YearResult {
   federalTax: number;
   stateTax: number;
   totalTax: number;
+  marginalRate: number;
   endingAssets: number;
 }
 

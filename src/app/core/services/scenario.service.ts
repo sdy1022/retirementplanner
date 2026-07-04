@@ -23,6 +23,7 @@ export class ScenarioService {
       rothConversionStrategy: row.roth_conversion_strategy,
       assumedReturnRate: Number(row.assumed_return_rate),
       stateTaxRate: Number(row.state_tax_rate ?? 0),
+      wageIncome: Number(row.wage_income ?? 0),
     }));
   }
 
@@ -40,6 +41,7 @@ export class ScenarioService {
       roth_conversion_strategy: scenario.rothConversionStrategy,
       assumed_return_rate: scenario.assumedReturnRate,
       state_tax_rate: scenario.stateTaxRate,
+      wage_income: scenario.wageIncome,
     });
   }
 

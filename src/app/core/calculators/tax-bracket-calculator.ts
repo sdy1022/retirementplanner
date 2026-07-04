@@ -21,8 +21,8 @@ export function getMarginalBracket(grossIncome: number, filingStatus: FilingStat
 
 export function amountToFillBracket(grossIncome: number, targetBracketCeiling: number, filingStatus: FilingStatus, year: number): number {
   const table = getTaxTable(year, filingStatus);
-  const taxableIncome = Math.max(0, grossIncome - table.standardDeduction);
-  return Math.max(0, targetBracketCeiling - taxableIncome);
+  const targetGross = targetBracketCeiling + table.standardDeduction;
+  return Math.max(0, targetGross - grossIncome);
 }
 
 export function ceilingForRate(rate: number, filingStatus: FilingStatus, year: number): number {

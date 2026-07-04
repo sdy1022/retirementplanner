@@ -30,7 +30,8 @@ describe('roth-conversion-calculator', () => {
       stateTaxRate: 0,
     });
 
-    expect(year.conversion).toBe(48475);
+    // 12% bracket taxable ceiling ($48,475) + standard deduction ($15,000) with zero base income
+    expect(year.conversion).toBe(63475);
     expect(accounts[0].balance).toBe(100000);
   });
 });

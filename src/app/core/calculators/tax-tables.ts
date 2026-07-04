@@ -14,6 +14,18 @@ export const TAX_TABLES: Record<number, Record<FilingStatus, { standardDeduction
         { rate: 0.37, min: 626350, max: Number.POSITIVE_INFINITY },
       ],
     },
+    married_filing_jointly: {
+      standardDeduction: 30000,
+      brackets: [
+        { rate: 0.1, min: 0, max: 23850 },
+        { rate: 0.12, min: 23850, max: 96950 },
+        { rate: 0.22, min: 96950, max: 206700 },
+        { rate: 0.24, min: 206700, max: 394600 },
+        { rate: 0.32, min: 394600, max: 501050 },
+        { rate: 0.35, min: 501050, max: 751600 },
+        { rate: 0.37, min: 751600, max: Number.POSITIVE_INFINITY },
+      ],
+    },
   },
 };
 

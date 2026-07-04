@@ -2,23 +2,25 @@ import { Injectable, signal } from '@angular/core';
 import { AccountSnapshot, Scenario } from '../models/retirement.models';
 
 const defaultAccounts: AccountSnapshot[] = [
-  { type: 'traditional_401k', balance: 650000, snapshotDate: '2026-07-02' },
-  { type: 'roth_ira', balance: 120000, snapshotDate: '2026-07-02' },
-  { type: 'brokerage', balance: 180000, costBasis: 120000, snapshotDate: '2026-07-02' },
+  { type: 'traditional_401k', balance: 1600000, snapshotDate: '2026-07-02' },
+  { type: 'roth_ira', balance: 500000, snapshotDate: '2026-07-02' },
+  { type: 'traditional_ira', balance: 500000, snapshotDate: '2026-07-02' },
+  { type: 'brokerage', balance: 500000, snapshotDate: '2026-07-02' },
 ];
 
 const defaultScenario: Scenario = {
-  name: 'Fill 22% bracket',
-  currentAge: 58,
-  retirementAge: 67,
-  birthYear: 1968,
-  ssClaimAge: 67,
-  ssPia: 2800,
-  lifeExpectancy: 92,
-  filingStatus: 'single',
-  rothConversionStrategy: { mode: 'fill-to-bracket', targetBracket: 0.22 },
-  assumedReturnRate: 0.05,
-  stateTaxRate: 0,
+  name: 'Smooth to 24% bracket',
+  currentAge: 52,
+  retirementAge: 60,
+  birthYear: 1973,
+  ssClaimAge: 62,
+  ssPia: 2200,
+  lifeExpectancy: 90,
+  filingStatus: 'married_filing_jointly',
+  rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
+  assumedReturnRate: 0.08,
+  stateTaxRate: 0.0495,
+  wageIncome: 180000,
 };
 
 @Injectable({ providedIn: 'root' })
