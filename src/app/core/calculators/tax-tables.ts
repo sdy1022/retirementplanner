@@ -34,3 +34,36 @@ export const DEFAULT_TAX_YEAR = 2026;
 export function getTaxTable(year: number, filingStatus: FilingStatus) {
   return TAX_TABLES[year]?.[filingStatus] ?? TAX_TABLES[DEFAULT_TAX_YEAR][filingStatus];
 }
+
+// Medicare IRMAA: combined Part B + Part D monthly surcharges per person (approximate 2026 values).
+// Premiums are cliff-based: crossing a MAGI threshold by $1 incurs the full tier surcharge.
+export interface IrmaaTier {
+  magiThreshold: number;
+  monthlySurchargePerPerson: number;
+}
+
+export const IRMAA_TIERS: Record<FilingStatus, IrmaaTier[]> = {
+  single: [
+    { magiThreshold: 106000, monthlySurchargePerPerson: 87.7 },
+    { magiThreshold: 133000, monthlySurchargePerPerson: 220.3 },
+    { magiThreshold: 167000, monthlySurchargePerPerson: 352.9 },
+    { magiThreshold: 200000, monthlySurchargePerPerson: 485.5 },
+    { magiThreshold: 500000, monthlySurchargePerPerson: 529.7 },
+  ],
+  married_filing_jointly: [
+    { magiThreshold: 212000, monthlySurchargePerPerson: 87.7 },
+    { magiThreshold: 266000, monthlySurchargePerPerson: 220.3 },
+    { magiThreshold: 334000, monthlySurchargePerPerson: 352.9 },
+    { magiThreshold: 400000, monthlySurchargePerPerson: 485.5 },
+    { magiThreshold: 750000, monthlySurchargePerPerson: 529.7 },
+  ],
+};
+
+export function irmaaAnnualSurcharge(magi: number, filingStatus: FilingStatus): number {
+  const persons = filingStatus === 'married_filing_jointly' ? 2 : 1;
+  let monthly = 0;
+  for (const tier of IRMAA_TIERS[filingStatus]) {
+    if (magi > tier.magiThreshold) monthly = tier.monthlySurchargePerPerson;
+  }
+  return Math.round(monthly * 12 * persons * 100) / 100;
+}

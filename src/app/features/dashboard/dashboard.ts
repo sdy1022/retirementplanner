@@ -12,6 +12,18 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
   selector: 'app-dashboard',
   imports: [CurrencyPipe, MatCardModule, NgxChartsModule],
   template: `
+    <section class="rmd-banner">
+      <mat-card>
+        <mat-card-content>
+          <strong>RMDs start at age {{ rmdStartAge() }}</strong> — projected pre-tax (Traditional) balance at that age:
+          <strong>{{ traditionalAtRmdStart() | currency }}</strong>
+          <span class="divider">|</span>
+          <strong>Total assets at age {{ finalAge() }}:</strong>
+          <strong>{{ result().endingAssets | currency }}</strong>
+        </mat-card-content>
+      </mat-card>
+    </section>
+
     <section class="summary">
       <mat-card>
         <mat-card-header><mat-card-title>{{ result().scenarioName }}</mat-card-title></mat-card-header>
@@ -75,6 +87,9 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     </section>
   `,
   styles: `
+    .rmd-banner { margin-bottom: 20px; }
+    .rmd-banner mat-card-content { min-height: unset; padding: 14px 16px; font-size: 1.05rem; }
+    .rmd-banner .divider { margin: 0 10px; color: #b0bac4; }
     .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
     .advice, .action-plan { margin-bottom: 20px; }
     .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
@@ -95,6 +110,12 @@ export class Dashboard {
   readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));
   readonly assetChart = computed(() => this.toSeries('Assets', this.result(), this.baseline(), 'endingAssets'));
   readonly actionPlan = computed(() => generateActionPlan(this.result(), this.state.scenario().filingStatus));
+  readonly rmdStartAge = computed(() => getRmdStartAge(this.state.scenario().birthYear));
+  readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
+  readonly traditionalAtRmdStart = computed(() => {
+    const startYear = this.result().years.find(y => y.age === this.rmdStartAge());
+    return startYear?.traditionalBalance ?? 0;
+  });
 
   readonly optimizationAdvice = computed(() => {
     const res = this.result();

@@ -21,7 +21,7 @@ export type RothConversionStrategy =
   | { mode: 'fixed-amount'; amount: number; stopAtRmdAge?: boolean }
   | { mode: 'fill-to-bracket'; targetBracket: number }
   | { mode: 'smooth-to-bracket'; targetBracket: number }
-  | { mode: 'fill-to-income'; targetIncome: number; stopAtRmdAge?: boolean }
+  | { mode: 'fill-to-income'; targetIncome: number; stopAtRmdAge?: boolean; preserveFloor?: number }
   | { mode: 'smooth-income-target'; targetBracket: number }
   | { mode: 'auto-optimize' };
 
@@ -61,7 +61,9 @@ export interface YearResult {
   federalTax: number;
   stateTax: number;
   totalTax: number;
+  irmaa: number;
   marginalRate: number;
+  livingExpenses: number;
   endingAssets: number;
 }
 

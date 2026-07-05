@@ -1,7 +1,7 @@
 import { AccountSnapshot, FilingStatus, RothConversionStrategy, YearResult } from '../models/retirement.models';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
-import { getTaxTable } from './tax-tables';
+import { getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
 
 export interface ConversionSimulationInput {
   accounts: AccountSnapshot[];
@@ -24,6 +24,17 @@ export interface ConversionSimulationInput {
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
 const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
 
+// Living expenses grow with inflation each year after retirement
+const EXPENSE_INFLATION_RATE = 0.03;
+
+// Traditional withdrawals up to the top of this bracket are cheap; harvest that space
+// for living expenses before touching brokerage or Roth
+const LOW_BRACKET_HARVEST_RATE = 0.12;
+
+// Medicare premiums (and IRMAA surcharges) start at 65, based on MAGI from two years prior
+const MEDICARE_AGE = 65;
+const IRMAA_LOOKBACK_YEARS = 2;
+
 export function simulateConversionStrategy(input: ConversionSimulationInput): YearResult[] {
   let traditionalBalance = sumAccounts(input.accounts, ['traditional_401k', 'traditional_ira']);
   let rothBalance = sumAccounts(input.accounts, ['roth_401k', 'roth_ira']);
@@ -33,6 +44,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   let brokerageBasis = sumCostBasis(input.accounts, ['brokerage']);
   const results: YearResult[] = [];
   const rmdStartAge = getRmdStartAge(input.birthYear);
+  const magiByAge = new Map<number, number>();
 
   for (let age = input.currentAge; age <= input.endAge; age++) {
     const isRetired = input.retirementAge ? age >= input.retirementAge : true;
@@ -41,22 +53,38 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
     const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;
     const taxableSsIncome = roundCurrency(ssIncome * 0.85);
-
-    // Living expenses are covered by SS and RMD cash first, then brokerage, then traditional, then Roth.
-    // The traditional slice is ordinary income, so it joins the tax base before the conversion decision
-    // and consumes bracket room that would otherwise go to conversions.
-    const livingExpenses = isRetired ? (input.annualLivingExpenses ?? 0) : 0;
-    const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
-    const fromBrokerage = Math.min(brokerageBalance, spendingNeed);
-    const fromTraditional = Math.min(Math.max(0, traditionalBalance - rmd), spendingNeed - fromBrokerage);
-
-    const baseTaxableIncome = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd + fromTraditional;
-
-    // Only convert if retired (since in working years wages likely fill low brackets)
-    const conversion = isRetired ? Math.min(traditionalBalance - rmd - fromTraditional, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, input.taxYear ?? 2026, age, rmdStartAge)) : 0;
-    const taxableIncome = baseTaxableIncome + conversion;
     const taxYear = input.taxYear ?? 2026;
     const table = getTaxTable(taxYear, input.filingStatus);
+
+    // Living expenses are covered by SS and RMD cash first, then traditional withdrawals up to the
+    // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
+    // then Roth. All traditional slices are ordinary income, so they join the tax base before the
+    // conversion decision and consume bracket room that would otherwise go to conversions.
+    const expenseBaseAge = input.retirementAge ?? input.currentAge;
+    const livingExpenses = isRetired
+      ? roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, age - expenseBaseAge))
+      : 0;
+    // RMD cash pays expenses first (after SS); only the unspent remainder is deposited to brokerage
+    const rmdSpentOnExpenses = Math.min(rmd, Math.max(0, livingExpenses - ssIncome));
+    const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
+
+    const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd;
+    const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear) + table.standardDeduction;
+    const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
+    const fromTraditionalLow = Math.min(Math.max(0, traditionalBalance - rmd), spendingNeed, lowBracketRoom);
+    const fromBrokerage = Math.min(brokerageBalance, spendingNeed - fromTraditionalLow);
+    const fromTraditionalHigh = Math.min(Math.max(0, traditionalBalance - rmd - fromTraditionalLow), spendingNeed - fromTraditionalLow - fromBrokerage);
+    const fromTraditional = fromTraditionalLow + fromTraditionalHigh;
+
+    const baseTaxableIncome = baseIncomeBeforeWithdrawals + fromTraditional;
+
+    // Only convert if retired (since in working years wages likely fill low brackets).
+    // A preserve floor keeps part of the traditional balance unconverted so later years
+    // can drain it through the low brackets instead of paying conversion-rate tax now.
+    const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
+    const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
+    const conversion = isRetired ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge)) : 0;
+    const taxableIncome = baseTaxableIncome + conversion;
     const stateTaxableIncome = Math.max(0, taxableIncome - table.standardDeduction);
     const brokerageGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
@@ -67,16 +95,24 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const totalTax = roundCurrency(federalTax + stateTax);
     const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear).rate;
 
-    traditionalBalance = Math.max(0, traditionalBalance - rmd - fromTraditional - conversion);
-    brokerageBalance = roundCurrency(brokerageBalance + rmd - fromBrokerage);
-    // Withdrawals consume basis pro rata; RMD cash deposits carry full basis
-    brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)) + rmd);
+    // IRMAA: Medicare surcharge from 65 on, cliff-based on MAGI from two years prior.
+    // MAGI proxy = gross ordinary income + realized capital gains.
+    const magi = roundCurrency(taxableIncome + realizedGain);
+    magiByAge.set(age, magi);
+    const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? magi;
+    const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus) : 0;
 
+    traditionalBalance = Math.max(0, traditionalBalance - rmd - fromTraditional - conversion);
+    brokerageBalance = roundCurrency(brokerageBalance + rmd - rmdSpentOnExpenses - fromBrokerage);
+    // Withdrawals consume basis pro rata; unspent RMD cash deposits carry full basis
+    brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)) + rmd - rmdSpentOnExpenses);
+
+    const totalOutflow = roundCurrency(totalTax + irmaa);
     let actualRothDeposit = conversion;
-    if (brokerageBalance >= totalTax) {
-      brokerageBalance = roundCurrency(brokerageBalance - totalTax);
+    if (brokerageBalance >= totalOutflow) {
+      brokerageBalance = roundCurrency(brokerageBalance - totalOutflow);
     } else {
-      const unpaidTax = roundCurrency(totalTax - brokerageBalance);
+      const unpaidTax = roundCurrency(totalOutflow - brokerageBalance);
       brokerageBalance = 0;
       actualRothDeposit = Math.max(0, conversion - unpaidTax);
     }
@@ -103,7 +139,9 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       federalTax,
       stateTax,
       totalTax,
+      irmaa,
       marginalRate,
+      livingExpenses,
       endingAssets: roundCurrency(traditionalBalance + rothBalance + brokerageBalance),
     });
   }

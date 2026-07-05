@@ -14,6 +14,7 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
   const firstRmdAge = result.years.find(y => y.rmd > 0)?.age;
 
   for (const year of result.years) {
+    const bracketMsg = ` Current bracket: ${Math.round(year.marginalRate * 100)}%.`;
     if (year.conversion > 0) {
       // Compute effective federal rate on conversion only (marginal blend)
       const baseGross = year.taxableIncome - year.conversion;
@@ -49,27 +50,44 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
       if (year.totalTax > 0) {
         msg += ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.`;
       }
+      if (year.irmaa > 0) {
+        msg += ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.`;
+      }
+      if (year.livingExpenses > 0) {
+        msg += ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.`;
+      }
+      msg += bracketMsg;
 
       steps.push({ age: year.age, message: msg, status: 'info' });
     }
 
     if (year.rmd > 0) {
       const rmdSpill = year.marginalRate >= 0.32;
+      const expenseMsg = year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '';
+      const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
+      const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
       if (rmdSpill) {
         steps.push({
           age: year.age,
-          message: `⚠ RMD of $${year.rmd.toLocaleString()} pushes you into the ${Math.round(year.marginalRate * 100)}% bracket! Consider increasing earlier conversions.`,
+          message: `⚠ RMD of $${year.rmd.toLocaleString()} pushes you into the ${Math.round(year.marginalRate * 100)}% bracket! Consider increasing earlier conversions.` + expenseMsg + taxMsg + irmaaMsg,
           status: 'warning'
         });
       } else {
-        if (year.age === firstRmdAge || year.age % 5 === 0) {
-          steps.push({
-            age: year.age,
-            message: `✓ RMD of $${year.rmd.toLocaleString()} stays within the ${Math.round(year.marginalRate * 100)}% band.`,
-            status: 'success'
-          });
-        }
+        steps.push({
+          age: year.age,
+          message: `✓ RMD of $${year.rmd.toLocaleString()} stays within the ${Math.round(year.marginalRate * 100)}% band.` + expenseMsg + taxMsg + irmaaMsg,
+          status: 'success'
+        });
       }
+    } else if (year.conversion === 0 && (year.livingExpenses > 0 || year.age >= 60)) {
+      const expenseMsg = year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '';
+      const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
+      const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
+      steps.push({
+        age: year.age,
+        message: `No conversion or RMD required this year.` + expenseMsg + taxMsg + irmaaMsg + bracketMsg,
+        status: 'info'
+      });
     }
   }
 

@@ -1,6 +1,6 @@
 import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy } from './roth-conversion-calculator';
-import { getTaxTable } from './tax-tables';
+import { getTaxTable, IRMAA_TIERS } from './tax-tables';
 import { getRmdStartAge } from './rmd-calculator';
 
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
@@ -94,29 +94,58 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
   if (scenario.rothConversionStrategy.mode === 'smooth-income-target') {
     const targetBracket = scenario.rothConversionStrategy.targetBracket;
     const rmdStartAge = getRmdStartAge(scenario.birthYear);
+    const table = getTaxTable(2026, scenario.filingStatus);
 
-    const maxIncome = 1000000;
+    // Convert as much as possible before RMD age: fill the target bracket to its top every year
+    // (a flat gross-income ceiling, so conversions shrink automatically when SS starts).
+    // If RMD years would still spill past that bracket, escalate to the next bracket and retry.
+    // Within each bracket, search for the best "preserve floor" — traditional balance left
+    // unconverted so later years drain it through the low brackets instead of paying
+    // conversion-rate tax up front. Scored by after-tax ending assets: leftover traditional
+    // is discounted by an assumed liquidation rate so pre-tax dollars don't count as full value.
+    const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
+    const candidateBrackets = table.brackets.filter(b => b.rate >= targetBracket && Number.isFinite(b.max));
     let bestYears: YearResult[] | null = null;
 
-    // We want the lowest possible income ceiling that keeps all RMD years <= targetBracket.
-    // Each year converts just enough to lift total income to the ceiling, so the conversion
-    // shrinks automatically when Social Security starts and total income stays flat.
-    for (let income = maxIncome; income >= 20000; income -= 2000) {
-      const years = runWithStrategy({ mode: 'fill-to-income', targetIncome: income, stopAtRmdAge: true });
+    const irmaaThresholds = IRMAA_TIERS[scenario.filingStatus].map(t => t.magiThreshold);
 
-      const rmdYears = years.filter(y => y.age >= rmdStartAge);
-      const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
+    for (const bracket of candidateBrackets) {
+      const bracketCeiling = bracket.max + table.standardDeduction;
+      // Besides the bracket top, also try stopping just under each Medicare IRMAA cliff inside
+      // this bracket — the score decides whether dodging the surcharge beats converting more.
+      const ceilings = [
+        bracketCeiling,
+        ...irmaaThresholds.filter(t => t < bracketCeiling && t - table.standardDeduction > bracket.min),
+      ];
+      let bestScore = -Infinity;
+      let bracketBest: YearResult[] | null = null;
 
-      if (maxRate <= targetBracket) {
-        bestYears = years;
-      } else {
-        // Lower ceilings convert less, leaving an even larger traditional balance at RMD age,
-        // so the last successful ceiling was the optimal (lowest) one.
+      for (const targetIncome of ceilings) {
+        for (let floor = 0; floor <= 2500000; floor += 50000) {
+          const years = runWithStrategy({ mode: 'fill-to-income', targetIncome, stopAtRmdAge: true, preserveFloor: floor });
+
+          const rmdYears = years.filter(y => y.age >= rmdStartAge);
+          const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
+          if (maxRate > bracket.rate) continue;
+
+          const last = years.at(-1)!;
+          const score = last.endingAssets - last.traditionalBalance * RESIDUAL_TRADITIONAL_TAX_RATE;
+          if (score > bestScore) {
+            bestScore = score;
+            bracketBest = years;
+          }
+        }
+      }
+
+      if (bracketBest) {
+        bestYears = bracketBest;
         break;
       }
+      // No ceiling/floor keeps RMD years within this bracket; remember the floor-0 run and escalate
+      bestYears = runWithStrategy({ mode: 'fill-to-income', targetIncome: bracketCeiling, stopAtRmdAge: true });
     }
 
-    const finalYears = bestYears ?? runWithStrategy({ mode: 'fill-to-income', targetIncome: maxIncome, stopAtRmdAge: true });
+    const finalYears = bestYears!;
     return {
       scenarioName: scenario.name,
       years: finalYears,
