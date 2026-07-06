@@ -31,6 +31,10 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <div class="metric"><span>Total tax</span><strong>{{ result().totalTax | currency }}</strong></div>
           <div class="metric"><span>Ending assets</span><strong>{{ result().endingAssets | currency }}</strong></div>
           <div class="metric"><span>After-tax ending assets</span><strong>{{ resultAfterTax() | currency }}</strong></div>
+          <div class="metric sub"><span>Pre-tax (Traditional) at {{ finalAge() }}</span><strong>{{ resultFinalYear()?.traditionalBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Roth at {{ finalAge() }}</span><strong>{{ resultFinalYear()?.rothBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Brokerage at {{ finalAge() }}</span><strong>{{ resultFinalYear()?.brokerageBalance | currency }}</strong></div>
+          <div class="metric sub"><span>… of which unrealized gain</span><strong>{{ resultUnrealizedGain() | currency }}</strong></div>
           @if (result().note) {
             <p class="strategy-note">ℹ️ {{ result().note }}</p>
           }
@@ -42,6 +46,9 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <div class="metric"><span>Total tax</span><strong>{{ baseline().totalTax | currency }}</strong></div>
           <div class="metric"><span>Ending assets</span><strong>{{ baseline().endingAssets | currency }}</strong></div>
           <div class="metric"><span>After-tax ending assets</span><strong>{{ baselineAfterTax() | currency }}</strong></div>
+          <div class="metric sub"><span>Pre-tax (Traditional) at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.traditionalBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Roth at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.rothBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Brokerage at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.brokerageBalance | currency }}</strong></div>
         </mat-card-content>
       </mat-card>
     </section>
@@ -104,6 +111,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .action-list li.status-success { color: #2e7d32; }
     .strategy-note { margin: 12px 0 0; padding: 10px 12px; background: #eef4fb; border-radius: 6px; font-size: 0.92rem; line-height: 1.5; color: #33475b; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
+    .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
     .charts { display: grid; grid-template-columns: 1fr; gap: 20px; }
     mat-card-content { min-height: 280px; }
@@ -121,6 +129,12 @@ export class Dashboard {
   readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
   readonly resultAfterTax = computed(() => this.afterTaxEndingAssets(this.result()));
   readonly baselineAfterTax = computed(() => this.afterTaxEndingAssets(this.baseline()));
+  readonly resultFinalYear = computed(() => this.result().years.at(-1));
+  readonly baselineFinalYear = computed(() => this.baseline().years.at(-1));
+  readonly resultUnrealizedGain = computed(() => {
+    const last = this.resultFinalYear();
+    return Math.max(0, (last?.brokerageBalance ?? 0) - (last?.brokerageBasis ?? 0));
+  });
 
   // Pre-tax traditional dollars are discounted by the residual liquidation rate, and
   // unrealized brokerage gains by the gains rate (0 = heirs' step-up in basis), so
