@@ -4,7 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
 import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
-import { ScenarioResult } from '../../core/models/retirement.models';
+import { ScenarioResult, YearResult } from '../../core/models/retirement.models';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculators/rmd-calculator';
 
@@ -123,7 +123,20 @@ export class Dashboard {
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
   readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));
-  readonly assetChart = computed(() => this.toSeries('Assets', this.result(), this.baseline(), 'endingAssets'));
+  readonly assetChart = computed(() => {
+    const res = this.result();
+    const perAccount = (label: string, key: keyof YearResult) => ({
+      name: label,
+      series: res.years.map((year) => ({ name: String(year.age), value: year[key] as number })),
+    });
+    return [
+      perAccount(`${res.scenarioName} total`, 'endingAssets'),
+      perAccount('Pre-tax (Traditional)', 'traditionalBalance'),
+      perAccount('Roth', 'rothBalance'),
+      perAccount('Brokerage', 'brokerageBalance'),
+      { name: 'Baseline total', series: this.baseline().years.map((year) => ({ name: String(year.age), value: year.endingAssets })) },
+    ];
+  });
   readonly actionPlan = computed(() => generateActionPlan(this.result(), this.state.scenario().filingStatus));
   readonly rmdStartAge = computed(() => getRmdStartAge(this.state.scenario().birthYear));
   readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
