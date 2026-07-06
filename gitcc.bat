@@ -1,0 +1,1 @@
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\auto-commit-cc.ps1
