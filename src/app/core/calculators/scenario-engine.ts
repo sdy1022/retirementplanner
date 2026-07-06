@@ -9,9 +9,11 @@ export const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
 
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+  const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
   const afterTax = (r: ScenarioResult) => {
     const last = r.years.at(-1);
-    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate;
+    if (!last) return 0;
+    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate;
   };
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
@@ -57,11 +59,13 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
 
 function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
-  // After-tax score: leftover traditional is discounted by the residual liquidation rate
-  // so pre-tax dollars don't count as full value when comparing candidate strategies
+  const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
+  // After-tax score: leftover traditional is discounted by the residual liquidation rate,
+  // and unrealized brokerage gains by the gains rate (0 = heirs' step-up in basis), so
+  // pre-tax dollars don't count as full value when comparing candidate strategies
   const afterTaxScore = (years: YearResult[]) => {
     const last = years.at(-1)!;
-    return last.endingAssets - last.traditionalBalance * residualRate;
+    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate;
   };
   const runWithStrategy = (strategy: RothConversionStrategy) => {
     return simulateConversionStrategy({

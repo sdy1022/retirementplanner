@@ -365,6 +365,41 @@ describe('scenario-engine', () => {
     expect(gated.years.filter(y => y.age < 60).every(y => y.conversion === 0)).toBeTrue();
   });
 
+  it('brokerage gains tax rate flips the expense funding order', () => {
+    const scenario: Scenario = {
+      name: 'Funding order',
+      currentAge: 60,
+      retirementAge: 60,
+      birthYear: 1966,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 60,
+      filingStatus: 'single',
+      // 12% bracket gross ceiling: $48,475 taxable + $15,000 standard deduction
+      rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 63475 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 30000,
+    };
+    const accounts = () => [
+      { type: 'traditional_ira' as const, balance: 200000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 100000, costBasis: 50000, snapshotDate: '2026-01-01' },
+    ];
+
+    // Gains untaxed at the end (step-up assumption): IRA-first wins because
+    // brokerage-first's realized-gains tax is charged but its benefit never scores.
+    const stepUp = runScenario(scenario, accounts());
+    expect(stepUp.years[0].rothBalance).toBe(33475); // conversion tops off above the $30k withdrawal
+    expect(stepUp.note).toBeUndefined();
+
+    // Ending gains taxed at 15%: brokerage-first wins — spending brokerage shrinks the
+    // taxable gain pile while the full bracket room converts to Roth.
+    const spender = runScenario({ ...scenario, brokerageGainsTaxRate: 0.15 }, accounts());
+    expect(spender.years[0].rothBalance).toBe(63475); // full room converted
+    expect(spender.note).toContain('brokerage first');
+  });
+
   it('reports a shortfall when no account can fund the year', () => {
     const scenario: Scenario = {
       name: 'Underfunded',

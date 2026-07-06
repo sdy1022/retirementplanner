@@ -122,12 +122,15 @@ export class Dashboard {
   readonly resultAfterTax = computed(() => this.afterTaxEndingAssets(this.result()));
   readonly baselineAfterTax = computed(() => this.afterTaxEndingAssets(this.baseline()));
 
-  // Pre-tax traditional dollars are discounted by the residual liquidation rate so
+  // Pre-tax traditional dollars are discounted by the residual liquidation rate, and
+  // unrealized brokerage gains by the gains rate (0 = heirs' step-up in basis), so
   // strategy and baseline are compared in equivalent after-tax terms
   private afterTaxEndingAssets(result: ScenarioResult): number {
     const last = result.years.at(-1);
     const residualRate = this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
-    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate;
+    const gainsRate = this.state.scenario().brokerageGainsTaxRate ?? 0;
+    const unrealizedGain = Math.max(0, (last?.brokerageBalance ?? 0) - (last?.brokerageBasis ?? 0));
+    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate - unrealizedGain * gainsRate;
   }
   readonly traditionalAtRmdStart = computed(() => {
     const startYear = this.result().years.find(y => y.age === this.rmdStartAge());

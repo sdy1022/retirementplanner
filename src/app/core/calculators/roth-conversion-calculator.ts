@@ -169,6 +169,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       traditionalBalance,
       rothBalance,
       brokerageBalance,
+      brokerageBasis: roundCurrency(brokerageBasis),
       rmd,
       conversion: roundCurrency(conversion),
       taxableIncome: roundCurrency(taxableIncome),

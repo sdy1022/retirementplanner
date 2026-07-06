@@ -53,6 +53,9 @@ export interface Scenario {
   // IRA before touching brokerage; 'brokerage-first' spends brokerage and leaves the bracket
   // room to conversions. Left unset, the engine tries both and keeps the after-tax winner.
   spendingOrder?: SpendingOrder;
+  // Tax rate applied to unrealized brokerage gains remaining at the end of the plan.
+  // 0 (default) models the step-up in basis heirs receive; ~0.15 models spending it yourself.
+  brokerageGainsTaxRate?: number;
 }
 
 export type SpendingOrder = 'traditional-first' | 'brokerage-first';
@@ -69,6 +72,8 @@ export interface YearResult {
   traditionalBalance: number;
   rothBalance: number;
   brokerageBalance: number;
+  // Remaining cost basis; brokerageBalance - brokerageBasis is the unrealized gain
+  brokerageBasis: number;
   rmd: number;
   conversion: number;
   taxableIncome: number;
