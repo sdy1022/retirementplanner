@@ -49,7 +49,13 @@ export interface Scenario {
   allowPreRetirementConversions?: boolean;
   // Flat dollar raise added to wageIncome each year until retirement (e.g. 5000 = +$5k/yr).
   annualWageGrowth?: number;
+  // How living expenses are funded: 'traditional-first' harvests the low brackets from the
+  // IRA before touching brokerage; 'brokerage-first' spends brokerage and leaves the bracket
+  // room to conversions. Left unset, the engine tries both and keeps the after-tax winner.
+  spendingOrder?: SpendingOrder;
 }
+
+export type SpendingOrder = 'traditional-first' | 'brokerage-first';
 
 export interface RmdYearEntry {
   age: number;

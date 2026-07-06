@@ -1,4 +1,4 @@
-import { AccountSnapshot, FilingStatus, RothConversionStrategy, YearResult } from '../models/retirement.models';
+import { AccountSnapshot, FilingStatus, RothConversionStrategy, SpendingOrder, YearResult } from '../models/retirement.models';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
 import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
@@ -21,6 +21,7 @@ export interface ConversionSimulationInput {
   taxYear?: number;
   allowPreRetirementConversions?: boolean;
   annualWageGrowth?: number;
+  spendingOrder?: SpendingOrder;
 }
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
@@ -77,7 +78,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd;
     const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear, inflationFactor) + table.standardDeduction;
     const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
-    const fromTraditionalLow = Math.min(Math.max(0, traditionalBalance - rmd), spendingNeed, lowBracketRoom);
+    // 'brokerage-first' skips the low-bracket harvest so conversions get the bracket room instead
+    const fromTraditionalLow = input.spendingOrder === 'brokerage-first'
+      ? 0
+      : Math.min(Math.max(0, traditionalBalance - rmd), spendingNeed, lowBracketRoom);
     const fromBrokerage = Math.min(brokerageBalance, spendingNeed - fromTraditionalLow);
     const fromTraditionalHigh = Math.min(Math.max(0, traditionalBalance - rmd - fromTraditionalLow), spendingNeed - fromTraditionalLow - fromBrokerage);
     const fromTraditional = fromTraditionalLow + fromTraditionalHigh;

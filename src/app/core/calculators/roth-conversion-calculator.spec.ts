@@ -34,4 +34,30 @@ describe('roth-conversion-calculator', () => {
     expect(year.conversion).toBe(63475);
     expect(accounts[0].balance).toBe(100000);
   });
+
+  it('funds living expenses from brokerage when spendingOrder is brokerage-first', () => {
+    const [year] = simulateConversionStrategy({
+      accounts: [
+        { type: 'traditional_ira', balance: 100000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 50000, snapshotDate: '2026-01-01' },
+      ],
+      strategy: { mode: 'none' },
+      currentAge: 60,
+      endAge: 60,
+      birthYear: 1966,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      annualLivingExpenses: 20000,
+      retirementAge: 60,
+      spendingOrder: 'brokerage-first',
+    });
+
+    // The low-bracket harvest is skipped: expenses come from brokerage (full basis, no
+    // gain, no tax) and the traditional balance is untouched.
+    expect(year.taxableIncome).toBe(0);
+    expect(year.totalTax).toBe(0);
+    expect(year.traditionalBalance).toBe(100000);
+    expect(year.brokerageBalance).toBe(30000);
+  });
 });

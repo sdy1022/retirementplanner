@@ -1,4 +1,4 @@
-import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, YearResult } from '../models/retirement.models';
+import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, SpendingOrder, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy } from './roth-conversion-calculator';
 import { DEFAULT_TAX_YEAR, getTaxTable, IRMAA_TIERS } from './tax-tables';
 import { getRmdStartAge } from './rmd-calculator';
@@ -8,35 +8,51 @@ import { getRmdStartAge } from './rmd-calculator';
 export const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
 
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
-  const result = runScenarioCore(scenario, accounts);
-  if (!scenario.allowPreRetirementConversions) return result;
-
-  // Working-year conversions pay tax sooner, which shrinks the raw ending balance even
-  // when they win after tax. Run both variants, keep the after-tax winner, and explain
-  // the choice so the dashboard number isn't misleading.
-  const gated = runScenarioCore({ ...scenario, allowPreRetirementConversions: false }, accounts);
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
   const afterTax = (r: ScenarioResult) => {
     const last = r.years.at(-1);
     return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate;
   };
-  const withValue = afterTax(result);
-  const withoutValue = afterTax(gated);
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
-  if (withoutValue > withValue) {
-    return {
-      ...gated,
-      note: `Working-year conversions were skipped automatically: without them you keep ${fmt(withoutValue)} after tax vs ${fmt(withValue)} with them.`,
-    };
+  // Choices the user left open are tried both ways and settled by after-tax ending assets:
+  // spending order (IRA-low-bracket-first vs brokerage-first, only relevant with expenses)
+  // and working-year conversions (which pay tax sooner and can look worse pre-tax).
+  const spendingOrders: SpendingOrder[] = scenario.spendingOrder
+    ? [scenario.spendingOrder]
+    : (scenario.annualLivingExpenses ?? 0) > 0
+      ? ['traditional-first', 'brokerage-first']
+      : ['traditional-first'];
+  const preRetirementChoices = scenario.allowPreRetirementConversions ? [true, false] : [false];
+
+  const runs = spendingOrders.flatMap((spendingOrder) =>
+    preRetirementChoices.map((allowPreRetirementConversions) => {
+      const result = runScenarioCore({ ...scenario, spendingOrder, allowPreRetirementConversions }, accounts);
+      return { result, spendingOrder, allowPreRetirementConversions, value: afterTax(result) };
+    }),
+  );
+
+  let best = runs[0];
+  for (const run of runs) {
+    if (run.value > best.value) best = run;
   }
-  if (withValue > withoutValue) {
-    return {
-      ...result,
-      note: `Working-year conversions pay tax sooner, so the raw ending balance can look smaller — but after future taxes on traditional dollars you keep ${fmt(withValue)} vs ${fmt(withoutValue)} without them.`,
-    };
+
+  const notes: string[] = [];
+  if (scenario.allowPreRetirementConversions) {
+    const bestWith = Math.max(...runs.filter((r) => r.allowPreRetirementConversions).map((r) => r.value));
+    const bestWithout = Math.max(...runs.filter((r) => !r.allowPreRetirementConversions).map((r) => r.value));
+    if (bestWithout > bestWith) {
+      notes.push(`Working-year conversions were skipped automatically: without them you keep ${fmt(bestWithout)} after tax vs ${fmt(bestWith)} with them.`);
+    } else if (bestWith > bestWithout) {
+      notes.push(`Working-year conversions pay tax sooner, so the raw ending balance can look smaller — but after future taxes on traditional dollars you keep ${fmt(bestWith)} vs ${fmt(bestWithout)} without them.`);
+    }
   }
-  return result;
+  if (spendingOrders.length > 1 && best.spendingOrder === 'brokerage-first') {
+    const bestTraditionalFirst = Math.max(...runs.filter((r) => r.spendingOrder === 'traditional-first').map((r) => r.value));
+    notes.push(`Living expenses are paid from brokerage first, freeing bracket room for conversions: ${fmt(best.value)} after tax vs ${fmt(bestTraditionalFirst)} with IRA-first spending.`);
+  }
+
+  return notes.length > 0 ? { ...best.result, note: notes.join(' ') } : best.result;
 }
 
 function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
@@ -64,6 +80,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       ssClaimAge: scenario.ssClaimAge,
       allowPreRetirementConversions: scenario.allowPreRetirementConversions,
       annualWageGrowth: scenario.annualWageGrowth,
+      spendingOrder: scenario.spendingOrder,
     });
   };
 
