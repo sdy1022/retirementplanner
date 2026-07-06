@@ -1,6 +1,6 @@
 import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy } from './roth-conversion-calculator';
-import { getTaxTable, IRMAA_TIERS } from './tax-tables';
+import { DEFAULT_TAX_YEAR, getTaxTable, IRMAA_TIERS } from './tax-tables';
 import { getRmdStartAge } from './rmd-calculator';
 
 // Assumed tax rate on traditional dollars remaining at the end of the plan (heirs/liquidation),
@@ -34,15 +34,17 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
   };
 
   if (scenario.rothConversionStrategy.mode === 'auto-optimize') {
-    const table = getTaxTable(2026, scenario.filingStatus);
+    const table = getTaxTable(DEFAULT_TAX_YEAR, scenario.filingStatus);
     let bestResult: ReturnType<typeof runWithStrategy> | null = null;
-    let maxEndingAssets = -Infinity;
+    // Candidates are compared by after-tax ending assets (same yardstick as the smooth
+    // modes) so leftover traditional dollars don't count at face value
+    let bestScore = -Infinity;
 
     for (const bracket of table.brackets) {
       const result = runWithStrategy({ mode: 'fill-to-bracket', targetBracket: bracket.rate });
-      const endingAssets = result.at(-1)?.endingAssets ?? 0;
-      if (endingAssets > maxEndingAssets) {
-        maxEndingAssets = endingAssets;
+      const score = afterTaxScore(result);
+      if (score > bestScore) {
+        bestScore = score;
         bestResult = result;
       }
     }
@@ -50,9 +52,9 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
     // Also scan fixed flat amounts from $50k to $500k in $10k increments to see if a smooth strategy beats filling a bracket
     for (let amt = 50000; amt <= 500000; amt += 10000) {
       const result = runWithStrategy({ mode: 'fixed-amount', amount: amt });
-      const endingAssets = result.at(-1)?.endingAssets ?? 0;
-      if (endingAssets > maxEndingAssets) {
-        maxEndingAssets = endingAssets;
+      const score = afterTaxScore(result);
+      if (score > bestScore) {
+        bestScore = score;
         bestResult = result;
       }
     }
@@ -121,7 +123,7 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
   if (scenario.rothConversionStrategy.mode === 'smooth-income-target') {
     const targetBracket = scenario.rothConversionStrategy.targetBracket;
     const rmdStartAge = getRmdStartAge(scenario.birthYear);
-    const table = getTaxTable(2026, scenario.filingStatus);
+    const table = getTaxTable(DEFAULT_TAX_YEAR, scenario.filingStatus);
 
     // Convert as much as possible before RMD age: fill the target bracket to its top every year
     // (a flat gross-income ceiling, so conversions shrink automatically when SS starts).
