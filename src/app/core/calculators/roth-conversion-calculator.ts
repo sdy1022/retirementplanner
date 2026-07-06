@@ -20,6 +20,7 @@ export interface ConversionSimulationInput {
   ssClaimAge?: number;
   taxYear?: number;
   allowPreRetirementConversions?: boolean;
+  annualWageGrowth?: number;
 }
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
@@ -49,7 +50,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
 
   for (let age = input.currentAge; age <= input.endAge; age++) {
     const isRetired = input.retirementAge ? age >= input.retirementAge : true;
-    const currentWage = isRetired ? 0 : (input.wageIncome ?? 0);
+    // Wages grow by a flat dollar raise each working year
+    const currentWage = isRetired ? 0 : Math.max(0, (input.wageIncome ?? 0) + (input.annualWageGrowth ?? 0) * (age - input.currentAge));
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
     const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;

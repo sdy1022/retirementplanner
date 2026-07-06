@@ -263,6 +263,40 @@ describe('scenario-engine', () => {
     expect(year.traditionalBalance).toBe(461650);
   });
 
+  it('grows wages by the annual raise, shrinking working-year conversion room', () => {
+    const scenario: Scenario = {
+      name: 'MFJ with raises',
+      currentAge: 53,
+      retirementAge: 60,
+      birthYear: 1973,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 54,
+      filingStatus: 'married_filing_jointly',
+      // 22% MFJ bracket gross ceiling: $206,700 taxable + $30,000 standard deduction
+      rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 236700 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 180000,
+      annualLivingExpenses: 0,
+      allowPreRetirementConversions: true,
+      annualWageGrowth: 5000,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 800000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 200000, snapshotDate: '2026-01-01' },
+    ]);
+
+    const [y53, y54] = result.years;
+    // Year one: $236,700 target - $180,000 wages leaves $56,700 of room.
+    expect(y53.conversion).toBe(56700);
+    expect(y53.taxableIncome).toBe(236700);
+    // Year two: wages rise to $185,000, so the room shrinks to $51,700.
+    expect(y54.conversion).toBe(51700);
+    expect(y54.taxableIncome).toBe(236700);
+  });
+
   it('smooth-income-target uses working years when pre-retirement conversions are allowed', () => {
     const scenario: Scenario = {
       name: 'Working-year 22% fill',

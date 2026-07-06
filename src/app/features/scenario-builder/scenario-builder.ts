@@ -22,6 +22,7 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
           <mat-form-field><mat-label>Current age</mat-label><input matInput type="number" formControlName="currentAge" /></mat-form-field>
           <mat-form-field><mat-label>Retirement age</mat-label><input matInput type="number" formControlName="retirementAge" /></mat-form-field>
           <mat-form-field><mat-label>Current wage</mat-label><input matInput type="number" formControlName="wageIncome" /></mat-form-field>
+          <mat-form-field><mat-label>Annual raise ($/yr)</mat-label><input matInput type="number" formControlName="annualWageGrowth" /></mat-form-field>
           <mat-form-field><mat-label>Annual expenses</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
           <mat-form-field><mat-label>Birth year</mat-label><input matInput type="number" formControlName="birthYear" /></mat-form-field>
           <mat-form-field><mat-label>SS claim age</mat-label><input matInput type="number" formControlName="ssClaimAge" /></mat-form-field>
@@ -96,6 +97,7 @@ export class ScenarioBuilder {
     retirementAge: [this.state.scenario().retirementAge, Validators.required],
     birthYear: [this.state.scenario().birthYear, Validators.required],
     wageIncome: [this.state.scenario().wageIncome, Validators.required],
+    annualWageGrowth: [this.state.scenario().annualWageGrowth ?? 0],
     annualLivingExpenses: [this.state.scenario().annualLivingExpenses ?? 0, Validators.required],
     ssClaimAge: [this.state.scenario().ssClaimAge, Validators.required],
     ssPia: [this.state.scenario().ssPia, Validators.required],
@@ -144,6 +146,7 @@ export class ScenarioBuilder {
       stateTaxRate: value.stateTaxRate,
       residualTaxRate: value.residualTaxRate,
       allowPreRetirementConversions: value.allowPreRetirementConversions,
+      annualWageGrowth: value.annualWageGrowth,
     };
 
     const now = new Date().toISOString().split('T')[0];

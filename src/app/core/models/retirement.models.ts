@@ -47,6 +47,8 @@ export interface Scenario {
   // Allow conversions during working years, using whatever bracket room remains above
   // wage income. The plan is charged only the incremental tax the conversion causes.
   allowPreRetirementConversions?: boolean;
+  // Flat dollar raise added to wageIncome each year until retirement (e.g. 5000 = +$5k/yr).
+  annualWageGrowth?: number;
 }
 
 export interface RmdYearEntry {
