@@ -1,4 +1,4 @@
-import { FilingStatus, ScenarioResult } from '../models/retirement.models';
+import { FilingStatus, ScenarioResult, YearResult } from '../models/retirement.models';
 import { calculateTax } from './tax-bracket-calculator';
 import { BRACKET_INFLATION_RATE, getTaxTable } from './tax-tables';
 
@@ -6,6 +6,27 @@ export interface ActionStep {
   age: number;
   message: string;
   status: 'info' | 'success' | 'warning' | 'danger';
+}
+
+// Names the accounts each dollar of expenses and taxes actually came from this year
+function fundingBreakdown(year: YearResult): string {
+  const money = (v: number) => `$${Math.round(v).toLocaleString()}`;
+  const expenseParts = [
+    year.expensesFromSs > 0 ? `Social Security ${money(year.expensesFromSs)}` : '',
+    year.expensesFromRmd > 0 ? `RMD ${money(year.expensesFromRmd)}` : '',
+    year.expensesFromTraditional > 0 ? `Traditional ${money(year.expensesFromTraditional)}` : '',
+    year.expensesFromBrokerage > 0 ? `brokerage ${money(year.expensesFromBrokerage)}` : '',
+    year.expensesFromRoth > 0 ? `Roth ${money(year.expensesFromRoth)}` : '',
+  ].filter(Boolean);
+  const taxParts = [
+    year.taxFromBrokerage > 0 ? `brokerage ${money(year.taxFromBrokerage)}` : '',
+    year.taxWithheldFromConversion > 0 ? `withheld from conversion ${money(year.taxWithheldFromConversion)}` : '',
+    year.taxFromRoth > 0 ? `Roth ${money(year.taxFromRoth)}` : '',
+  ].filter(Boolean);
+  let msg = '';
+  if (expenseParts.length > 0) msg += ` Expenses paid from: ${expenseParts.join(', ')}.`;
+  if (taxParts.length > 0) msg += ` Taxes paid from: ${taxParts.join(', ')}.`;
+  return msg;
 }
 
 export function generateActionPlan(result: ScenarioResult, filingStatus: FilingStatus, taxYear: number = 2026): ActionStep[] {
@@ -59,6 +80,7 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
       if (year.livingExpenses > 0) {
         msg += ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.`;
       }
+      msg += fundingBreakdown(year);
       msg += bracketMsg;
 
       steps.push({ age: year.age, message: msg, status: 'info' });
@@ -66,7 +88,9 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
 
     if (year.rmd > 0) {
       const rmdSpill = year.marginalRate >= 0.32;
-      const expenseMsg = year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '';
+      // The conversion line above already carries the breakdown for conversion years
+      const fundingMsg = year.conversion > 0 ? '' : fundingBreakdown(year);
+      const expenseMsg = (year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '') + fundingMsg;
       const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
       const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
       if (rmdSpill) {
@@ -83,7 +107,7 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
         });
       }
     } else if (year.conversion === 0 && (year.livingExpenses > 0 || year.age >= 60)) {
-      const expenseMsg = year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '';
+      const expenseMsg = (year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '') + fundingBreakdown(year);
       const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
       const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
       steps.push({

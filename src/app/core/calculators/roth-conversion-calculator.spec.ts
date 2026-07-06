@@ -59,6 +59,9 @@ describe('roth-conversion-calculator', () => {
     expect(year.totalTax).toBe(0);
     expect(year.traditionalBalance).toBe(100000);
     expect(year.brokerageBalance).toBe(30000);
+    // The funding sources are reported per year
+    expect(year.expensesFromBrokerage).toBe(20000);
+    expect(year.expensesFromTraditional).toBe(0);
   });
 
   it('taxes reinvested dividends annually and adds them to cost basis', () => {

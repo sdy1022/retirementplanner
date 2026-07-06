@@ -27,6 +27,9 @@ describe('scenario-engine', () => {
     expect(result.years.length).toBe(2);
     expect(result.totalTax).toBe(955);
     expect(result.endingAssets).toBe(49045);
+    // No brokerage exists, so the tax is withheld from the conversion itself
+    expect(result.years[0].taxWithheldFromConversion).toBe(500);
+    expect(result.years[0].taxFromBrokerage).toBe(0);
   });
 
   it('smooth-income-target keeps total income flat across the SS claim and RMD years within the bracket', () => {

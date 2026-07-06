@@ -89,6 +89,16 @@ export interface YearResult {
   marginalRate: number;
   livingExpenses: number;
   endingAssets: number;
+  // Funding sources for the year's living expenses
+  expensesFromSs: number;
+  expensesFromRmd: number;
+  expensesFromTraditional: number;
+  expensesFromBrokerage: number;
+  expensesFromRoth: number;
+  // Funding sources for the year's taxes and IRMAA
+  taxFromBrokerage: number;
+  taxWithheldFromConversion: number;
+  taxFromRoth: number;
 }
 
 export interface ScenarioResult {

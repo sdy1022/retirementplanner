@@ -135,11 +135,13 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)) + rmd - rmdSpentOnExpenses);
 
     const totalOutflow = roundCurrency(totalTax + irmaa);
+    let taxFromBrokerage = totalOutflow;
     let actualRothDeposit = conversion;
     let unpaidOutflow = 0;
     if (brokerageBalance >= totalOutflow) {
       brokerageBalance = roundCurrency(brokerageBalance - totalOutflow);
     } else {
+      taxFromBrokerage = brokerageBalance;
       const unpaidTax = roundCurrency(totalOutflow - brokerageBalance);
       brokerageBalance = 0;
       actualRothDeposit = Math.max(0, conversion - unpaidTax);
@@ -187,6 +189,14 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       marginalRate,
       livingExpenses,
       endingAssets: roundCurrency(traditionalBalance + rothBalance + brokerageBalance),
+      expensesFromSs: roundCurrency(Math.min(ssIncome, livingExpenses)),
+      expensesFromRmd: roundCurrency(rmdSpentOnExpenses),
+      expensesFromTraditional: roundCurrency(fromTraditional),
+      expensesFromBrokerage: roundCurrency(fromBrokerage),
+      expensesFromRoth: roundCurrency(fromRoth),
+      taxFromBrokerage: roundCurrency(taxFromBrokerage),
+      taxWithheldFromConversion: roundCurrency(Math.max(0, conversion - actualRothDeposit)),
+      taxFromRoth: roundCurrency(rothForTax),
     });
   }
 
