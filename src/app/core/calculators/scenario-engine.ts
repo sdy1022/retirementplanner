@@ -8,6 +8,38 @@ import { getRmdStartAge } from './rmd-calculator';
 export const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
 
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
+  const result = runScenarioCore(scenario, accounts);
+  if (!scenario.allowPreRetirementConversions) return result;
+
+  // Working-year conversions pay tax sooner, which shrinks the raw ending balance even
+  // when they win after tax. Run both variants, keep the after-tax winner, and explain
+  // the choice so the dashboard number isn't misleading.
+  const gated = runScenarioCore({ ...scenario, allowPreRetirementConversions: false }, accounts);
+  const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+  const afterTax = (r: ScenarioResult) => {
+    const last = r.years.at(-1);
+    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate;
+  };
+  const withValue = afterTax(result);
+  const withoutValue = afterTax(gated);
+  const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+
+  if (withoutValue > withValue) {
+    return {
+      ...gated,
+      note: `Working-year conversions were skipped automatically: without them you keep ${fmt(withoutValue)} after tax vs ${fmt(withValue)} with them.`,
+    };
+  }
+  if (withValue > withoutValue) {
+    return {
+      ...result,
+      note: `Working-year conversions pay tax sooner, so the raw ending balance can look smaller — but after future taxes on traditional dollars you keep ${fmt(withValue)} vs ${fmt(withoutValue)} without them.`,
+    };
+  }
+  return result;
+}
+
+function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
   // After-tax score: leftover traditional is discounted by the residual liquidation rate
   // so pre-tax dollars don't count as full value when comparing candidate strategies

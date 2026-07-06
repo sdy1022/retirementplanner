@@ -31,6 +31,9 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <div class="metric"><span>Total tax</span><strong>{{ result().totalTax | currency }}</strong></div>
           <div class="metric"><span>Ending assets</span><strong>{{ result().endingAssets | currency }}</strong></div>
           <div class="metric"><span>After-tax ending assets</span><strong>{{ resultAfterTax() | currency }}</strong></div>
+          @if (result().note) {
+            <p class="strategy-note">ℹ️ {{ result().note }}</p>
+          }
         </mat-card-content>
       </mat-card>
       <mat-card>
@@ -99,6 +102,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .action-list li.status-warning { color: #d32f2f; }
     .action-list li.status-danger { color: #b71c1c; font-weight: 600; }
     .action-list li.status-success { color: #2e7d32; }
+    .strategy-note { margin: 12px 0 0; padding: 10px 12px; background: #eef4fb; border-radius: 6px; font-size: 0.92rem; line-height: 1.5; color: #33475b; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
     .metric:last-child { border-bottom: 0; }
     .charts { display: grid; grid-template-columns: 1fr; gap: 20px; }

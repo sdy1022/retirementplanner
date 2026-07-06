@@ -261,6 +261,39 @@ describe('scenario-engine', () => {
     expect(year.brokerageBalance).toBe(91563);
     expect(year.rothBalance).toBe(38350);
     expect(year.traditionalBalance).toBe(461650);
+    // The engine explains why the raw ending balance looks smaller than without conversions.
+    expect(result.note).toContain('after future taxes');
+  });
+
+  it('auto-disables working-year conversions when they lose after tax', () => {
+    const scenario: Scenario = {
+      name: 'Conversions not worth it',
+      currentAge: 53,
+      retirementAge: 60,
+      birthYear: 1973,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 53,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 118350 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 80000,
+      annualLivingExpenses: 0,
+      allowPreRetirementConversions: true,
+      // Residual rate 0 means traditional dollars count at full value, so paying 22%
+      // conversion tax up front can only lose; the engine should pick the gated run.
+      residualTaxRate: 0,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 500000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' },
+    ]);
+
+    expect(result.years[0].conversion).toBe(0);
+    expect(result.endingAssets).toBe(600000);
+    expect(result.note).toContain('skipped automatically');
   });
 
   it('grows wages by the annual raise, shrinking working-year conversion room', () => {

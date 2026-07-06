@@ -81,4 +81,6 @@ export interface ScenarioResult {
   years: YearResult[];
   totalTax: number;
   endingAssets: number;
+  // Plain-language explanation of automatic strategy decisions, shown on the dashboard
+  note?: string;
 }
