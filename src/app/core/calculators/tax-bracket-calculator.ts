@@ -1,8 +1,8 @@
 import { FilingStatus, TaxBracket } from '../models/retirement.models';
 import { getTaxTable } from './tax-tables';
 
-export function calculateTax(grossIncome: number, filingStatus: FilingStatus, year: number): number {
-  const table = getTaxTable(year, filingStatus);
+export function calculateTax(grossIncome: number, filingStatus: FilingStatus, year: number, inflationFactor = 1): number {
+  const table = getTaxTable(year, filingStatus, inflationFactor);
   const taxableIncome = Math.max(0, grossIncome - table.standardDeduction);
 
   return roundCurrency(
@@ -13,20 +13,20 @@ export function calculateTax(grossIncome: number, filingStatus: FilingStatus, ye
   );
 }
 
-export function getMarginalBracket(grossIncome: number, filingStatus: FilingStatus, year: number): TaxBracket {
-  const table = getTaxTable(year, filingStatus);
+export function getMarginalBracket(grossIncome: number, filingStatus: FilingStatus, year: number, inflationFactor = 1): TaxBracket {
+  const table = getTaxTable(year, filingStatus, inflationFactor);
   const taxableIncome = Math.max(0, grossIncome - table.standardDeduction);
   return table.brackets.find((bracket) => taxableIncome >= bracket.min && taxableIncome <= bracket.max) ?? table.brackets.at(-1)!;
 }
 
-export function amountToFillBracket(grossIncome: number, targetBracketCeiling: number, filingStatus: FilingStatus, year: number): number {
-  const table = getTaxTable(year, filingStatus);
+export function amountToFillBracket(grossIncome: number, targetBracketCeiling: number, filingStatus: FilingStatus, year: number, inflationFactor = 1): number {
+  const table = getTaxTable(year, filingStatus, inflationFactor);
   const targetGross = targetBracketCeiling + table.standardDeduction;
   return Math.max(0, targetGross - grossIncome);
 }
 
-export function ceilingForRate(rate: number, filingStatus: FilingStatus, year: number): number {
-  const bracket = getTaxTable(year, filingStatus).brackets.find((entry) => entry.rate === rate);
+export function ceilingForRate(rate: number, filingStatus: FilingStatus, year: number, inflationFactor = 1): number {
+  const bracket = getTaxTable(year, filingStatus, inflationFactor).brackets.find((entry) => entry.rate === rate);
   return bracket?.max ?? 0;
 }
 

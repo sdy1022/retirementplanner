@@ -31,8 +31,22 @@ export const TAX_TABLES: Record<number, Record<FilingStatus, { standardDeduction
 
 export const DEFAULT_TAX_YEAR = 2026;
 
-export function getTaxTable(year: number, filingStatus: FilingStatus) {
-  return TAX_TABLES[year]?.[filingStatus] ?? TAX_TABLES[DEFAULT_TAX_YEAR][filingStatus];
+// The IRS inflation-indexes brackets and the standard deduction annually. Simulated future
+// years scale the base-year table by this rate so nominal balance/expense growth doesn't
+// create artificial bracket creep (which would overstate the benefit of converting early).
+export const BRACKET_INFLATION_RATE = 0.03;
+
+export function getTaxTable(year: number, filingStatus: FilingStatus, inflationFactor = 1) {
+  const base = TAX_TABLES[year]?.[filingStatus] ?? TAX_TABLES[DEFAULT_TAX_YEAR][filingStatus];
+  if (inflationFactor === 1) return base;
+  return {
+    standardDeduction: base.standardDeduction * inflationFactor,
+    brackets: base.brackets.map((bracket) => ({
+      rate: bracket.rate,
+      min: bracket.min * inflationFactor,
+      max: Number.isFinite(bracket.max) ? bracket.max * inflationFactor : bracket.max,
+    })),
+  };
 }
 
 // Medicare IRMAA: combined Part B + Part D monthly surcharges per person (approximate 2026 values).

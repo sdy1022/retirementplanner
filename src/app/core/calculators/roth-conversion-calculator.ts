@@ -1,7 +1,7 @@
 import { AccountSnapshot, FilingStatus, RothConversionStrategy, YearResult } from '../models/retirement.models';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
-import { getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
+import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
 
 export interface ConversionSimulationInput {
   accounts: AccountSnapshot[];
@@ -54,7 +54,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;
     const taxableSsIncome = roundCurrency(ssIncome * 0.85);
     const taxYear = input.taxYear ?? 2026;
-    const table = getTaxTable(taxYear, input.filingStatus);
+    // Index brackets and standard deduction to the simulated year so frozen base-year
+    // brackets don't create artificial bracket creep against inflating balances/expenses
+    const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, age - input.currentAge);
+    const table = getTaxTable(taxYear, input.filingStatus, inflationFactor);
 
     // Living expenses are covered by SS and RMD cash first, then traditional withdrawals up to the
     // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
@@ -69,7 +72,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
 
     const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd;
-    const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear) + table.standardDeduction;
+    const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear, inflationFactor) + table.standardDeduction;
     const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
     const fromTraditionalLow = Math.min(Math.max(0, traditionalBalance - rmd), spendingNeed, lowBracketRoom);
     const fromBrokerage = Math.min(brokerageBalance, spendingNeed - fromTraditionalLow);
@@ -83,17 +86,17 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // can drain it through the low brackets instead of paying conversion-rate tax now.
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
-    const conversion = isRetired ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge)) : 0;
+    const conversion = isRetired ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
     const taxableIncome = baseTaxableIncome + conversion;
     const stateTaxableIncome = Math.max(0, taxableIncome - table.standardDeduction);
     const brokerageGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
     const capitalGainsFederalTax = roundCurrency(realizedGain * LONG_TERM_CAPITAL_GAINS_RATE);
     const capitalGainsStateTax = roundCurrency(realizedGain * input.stateTaxRate);
-    const federalTax = isRetired ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear) + capitalGainsFederalTax) : 0;
+    const federalTax = isRetired ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax) : 0;
     const stateTax = isRetired ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax) : 0;
     const totalTax = roundCurrency(federalTax + stateTax);
-    const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear).rate;
+    const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
 
     // IRMAA: Medicare surcharge from 65 on, cliff-based on MAGI from two years prior.
     // MAGI proxy = gross ordinary income + realized capital gains.
@@ -163,7 +166,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   return results;
 }
 
-function conversionAmount(strategy: RothConversionStrategy, taxableIncome: number, filingStatus: FilingStatus, taxYear: number, age: number, rmdStartAge: number): number {
+function conversionAmount(strategy: RothConversionStrategy, taxableIncome: number, filingStatus: FilingStatus, taxYear: number, age: number, rmdStartAge: number, inflationFactor: number): number {
   if (strategy.mode === 'none') {
     return 0;
   }
@@ -180,7 +183,7 @@ function conversionAmount(strategy: RothConversionStrategy, taxableIncome: numbe
   if (strategy.mode === 'auto-optimize' || strategy.mode === 'smooth-income-target') {
     return 0; // handled by scenario engine
   }
-  return amountToFillBracket(taxableIncome, ceilingForRate(strategy.targetBracket, filingStatus, taxYear), filingStatus, taxYear);
+  return amountToFillBracket(taxableIncome, ceilingForRate(strategy.targetBracket, filingStatus, taxYear, inflationFactor), filingStatus, taxYear, inflationFactor);
 }
 
 function latestAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): AccountSnapshot[] {

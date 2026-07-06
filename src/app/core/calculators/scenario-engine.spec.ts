@@ -21,11 +21,12 @@ describe('scenario-engine', () => {
 
     const result = runScenario(scenario, [{ type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' }]);
 
-    // Per year: $20k conversion, taxable $5k after the $15k standard deduction -> $500 tax,
+    // Year one: $20k conversion, taxable $5k after the $15k standard deduction -> $500 tax,
     // withheld from the conversion because there is no brokerage balance to pay it from.
+    // Year two: the deduction indexes 3% to $15,450, so taxable is $4,550 -> $455 tax.
     expect(result.years.length).toBe(2);
-    expect(result.totalTax).toBe(1000);
-    expect(result.endingAssets).toBe(49000);
+    expect(result.totalTax).toBe(955);
+    expect(result.endingAssets).toBe(49045);
   });
 
   it('smooth-income-target keeps total income flat across the SS claim and RMD years within the bracket', () => {

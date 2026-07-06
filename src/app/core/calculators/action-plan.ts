@@ -1,6 +1,6 @@
 import { FilingStatus, ScenarioResult } from '../models/retirement.models';
 import { calculateTax } from './tax-bracket-calculator';
-import { getTaxTable } from './tax-tables';
+import { BRACKET_INFLATION_RATE, getTaxTable } from './tax-tables';
 
 export interface ActionStep {
   age: number;
@@ -10,16 +10,19 @@ export interface ActionStep {
 
 export function generateActionPlan(result: ScenarioResult, filingStatus: FilingStatus, taxYear: number = 2026): ActionStep[] {
   const steps: ActionStep[] = [];
-  const table = getTaxTable(taxYear, filingStatus);
+  const startAge = result.years[0]?.age ?? 0;
   const firstRmdAge = result.years.find(y => y.rmd > 0)?.age;
 
   for (const year of result.years) {
+    // Match the engine's per-year bracket indexing so reported rates agree with the simulation
+    const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, year.age - startAge);
+    const table = getTaxTable(taxYear, filingStatus, inflationFactor);
     const bracketMsg = ` Current bracket: ${Math.round(year.marginalRate * 100)}%.`;
     if (year.conversion > 0) {
       // Compute effective federal rate on conversion only (marginal blend)
       const baseGross = year.taxableIncome - year.conversion;
-      const taxWithout = calculateTax(baseGross, filingStatus, taxYear);
-      const taxWith = calculateTax(year.taxableIncome, filingStatus, taxYear);
+      const taxWithout = calculateTax(baseGross, filingStatus, taxYear, inflationFactor);
+      const taxWith = calculateTax(year.taxableIncome, filingStatus, taxYear, inflationFactor);
       const conversionTax = taxWith - taxWithout;
       const effectiveRate = year.conversion > 0 ? conversionTax / year.conversion : 0;
 
