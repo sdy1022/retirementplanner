@@ -3,7 +3,7 @@ import { Component, computed, inject } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
-import { runScenario } from '../../core/calculators/scenario-engine';
+import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
 import { ScenarioResult } from '../../core/models/retirement.models';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculators/rmd-calculator';
@@ -30,6 +30,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
         <mat-card-content>
           <div class="metric"><span>Total tax</span><strong>{{ result().totalTax | currency }}</strong></div>
           <div class="metric"><span>Ending assets</span><strong>{{ result().endingAssets | currency }}</strong></div>
+          <div class="metric"><span>After-tax ending assets</span><strong>{{ resultAfterTax() | currency }}</strong></div>
         </mat-card-content>
       </mat-card>
       <mat-card>
@@ -37,6 +38,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
         <mat-card-content>
           <div class="metric"><span>Total tax</span><strong>{{ baseline().totalTax | currency }}</strong></div>
           <div class="metric"><span>Ending assets</span><strong>{{ baseline().endingAssets | currency }}</strong></div>
+          <div class="metric"><span>After-tax ending assets</span><strong>{{ baselineAfterTax() | currency }}</strong></div>
         </mat-card-content>
       </mat-card>
     </section>
@@ -95,6 +97,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
     .advice-list li, .action-list li { margin-bottom: 8px; }
     .action-list li.status-warning { color: #d32f2f; }
+    .action-list li.status-danger { color: #b71c1c; font-weight: 600; }
     .action-list li.status-success { color: #2e7d32; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
     .metric:last-child { border-bottom: 0; }
@@ -112,6 +115,16 @@ export class Dashboard {
   readonly actionPlan = computed(() => generateActionPlan(this.result(), this.state.scenario().filingStatus));
   readonly rmdStartAge = computed(() => getRmdStartAge(this.state.scenario().birthYear));
   readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
+  readonly resultAfterTax = computed(() => this.afterTaxEndingAssets(this.result()));
+  readonly baselineAfterTax = computed(() => this.afterTaxEndingAssets(this.baseline()));
+
+  // Pre-tax traditional dollars are discounted by the residual liquidation rate so
+  // strategy and baseline are compared in equivalent after-tax terms
+  private afterTaxEndingAssets(result: ScenarioResult): number {
+    const last = result.years.at(-1);
+    const residualRate = this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate;
+  }
   readonly traditionalAtRmdStart = computed(() => {
     const startYear = this.result().years.find(y => y.age === this.rmdStartAge());
     return startYear?.traditionalBalance ?? 0;
@@ -123,7 +136,8 @@ export class Dashboard {
     const advices = [];
 
     const taxDiff = base.totalTax - res.totalTax;
-    const assetsDiff = res.endingAssets - base.endingAssets;
+    // Compare in after-tax terms so leftover pre-tax traditional doesn't inflate the baseline
+    const assetsDiff = this.afterTaxEndingAssets(res) - this.afterTaxEndingAssets(base);
 
     const baseRmdTotal = base.years.reduce((sum, yr) => sum + yr.rmd, 0);
     const resRmdTotal = res.years.reduce((sum, yr) => sum + yr.rmd, 0);

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -7,6 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
+import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -27,6 +28,7 @@ import { RothConversionStrategy, Scenario } from '../../core/models/retirement.m
           <mat-form-field><mat-label>Life expectancy</mat-label><input matInput type="number" formControlName="lifeExpectancy" /></mat-form-field>
           <mat-form-field><mat-label>Return rate</mat-label><input matInput type="number" step="0.01" formControlName="assumedReturnRate" /></mat-form-field>
           <mat-form-field><mat-label>State tax rate</mat-label><input matInput type="number" step="0.01" formControlName="stateTaxRate" /></mat-form-field>
+          <mat-form-field><mat-label>Residual tax rate (heirs/liquidation)</mat-label><input matInput type="number" step="0.01" formControlName="residualTaxRate" /></mat-form-field>
           <mat-form-field>
             <mat-label>Filing status</mat-label>
             <mat-select formControlName="filingStatus">
@@ -67,6 +69,21 @@ export class ScenarioBuilder {
   private readonly state = inject(LocalStateService);
   private readonly fb = inject(FormBuilder);
 
+  constructor() {
+    effect(() => {
+      // Re-evaluate whenever accounts signal changes
+      const accounts = this.state.accounts();
+      if (this.form && this.form.pristine) {
+        this.form.patchValue({
+          traditionalBalance: this.getBalance(['traditional_401k', 'traditional_ira']),
+          rothBalance: this.getBalance(['roth_401k', 'roth_ira']),
+          brokerageBalance: this.getBalance(['brokerage']),
+          brokerageCostBasis: accounts.find(a => a.type === 'brokerage')?.costBasis ?? this.getBalance(['brokerage'])
+        });
+      }
+    });
+  }
+
   private getBalance(types: string[]): number {
     return this.state.accounts().filter(a => types.includes(a.type)).reduce((sum, a) => sum + a.balance, 0);
   }
@@ -83,6 +100,7 @@ export class ScenarioBuilder {
     lifeExpectancy: [this.state.scenario().lifeExpectancy, Validators.required],
     assumedReturnRate: [this.state.scenario().assumedReturnRate, Validators.required],
     stateTaxRate: [this.state.scenario().stateTaxRate],
+    residualTaxRate: [this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE],
     filingStatus: [this.state.scenario().filingStatus, Validators.required],
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [this.state.scenario().rothConversionStrategy.mode === 'fixed-amount' ? (this.state.scenario().rothConversionStrategy as any).amount : 25000],
@@ -121,6 +139,7 @@ export class ScenarioBuilder {
       rothConversionStrategy,
       assumedReturnRate: value.assumedReturnRate,
       stateTaxRate: value.stateTaxRate,
+      residualTaxRate: value.residualTaxRate,
     };
 
     const now = new Date().toISOString().split('T')[0];
