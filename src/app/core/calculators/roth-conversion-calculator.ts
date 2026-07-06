@@ -22,6 +22,7 @@ export interface ConversionSimulationInput {
   allowPreRetirementConversions?: boolean;
   annualWageGrowth?: number;
   spendingOrder?: SpendingOrder;
+  dividendYield?: number;
 }
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
@@ -102,25 +103,28 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
     const capitalGainsFederalTax = roundCurrency(realizedGain * LONG_TERM_CAPITAL_GAINS_RATE);
     const capitalGainsStateTax = roundCurrency(realizedGain * input.stateTaxRate);
+    // Dividends are a slice of the total return that gets taxed annually even when
+    // reinvested; the reinvestment raises cost basis after the year's growth is applied
+    const dividends = roundCurrency(brokerageBalance * (input.dividendYield ?? 0));
+    const dividendFederalTax = roundCurrency(dividends * LONG_TERM_CAPITAL_GAINS_RATE);
+    const dividendStateTax = roundCurrency(dividends * input.stateTaxRate);
     // Working years: wages cover their own taxes, so the plan is charged only the
     // incremental tax the conversion adds on top of wage income.
     const federalTax = isRetired
-      ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax)
-      : conversion > 0
-        ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(baseTaxableIncome, input.filingStatus, taxYear, inflationFactor))
-        : 0;
+      ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax + dividendFederalTax)
+      : roundCurrency((conversion > 0
+          ? calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(baseTaxableIncome, input.filingStatus, taxYear, inflationFactor)
+          : 0) + dividendFederalTax);
     const baseStateTaxableIncome = Math.max(0, baseTaxableIncome - table.standardDeduction);
     const stateTax = isRetired
-      ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax)
-      : conversion > 0
-        ? roundCurrency((stateTaxableIncome - baseStateTaxableIncome) * input.stateTaxRate)
-        : 0;
+      ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
+      : roundCurrency((conversion > 0 ? (stateTaxableIncome - baseStateTaxableIncome) * input.stateTaxRate : 0) + dividendStateTax);
     const totalTax = roundCurrency(federalTax + stateTax);
     const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
 
     // IRMAA: Medicare surcharge from 65 on, cliff-based on MAGI from two years prior.
-    // MAGI proxy = gross ordinary income + realized capital gains.
-    const magi = roundCurrency(taxableIncome + realizedGain);
+    // MAGI proxy = gross ordinary income + realized capital gains + dividends.
+    const magi = roundCurrency(taxableIncome + realizedGain + dividends);
     magiByAge.set(age, magi);
     const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? magi;
     const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus) : 0;
@@ -163,6 +167,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     traditionalBalance = roundCurrency(traditionalBalance * (1 + input.assumedReturnRate));
     rothBalance = roundCurrency(rothBalance * (1 + input.assumedReturnRate));
     brokerageBalance = roundCurrency(brokerageBalance * (1 + input.assumedReturnRate));
+    // Reinvested dividends were taxed this year, so they add to basis (never taxed again)
+    brokerageBasis = Math.min(roundCurrency(brokerageBasis + dividends), brokerageBalance);
 
     results.push({
       age,

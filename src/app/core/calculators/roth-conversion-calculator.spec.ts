@@ -60,4 +60,25 @@ describe('roth-conversion-calculator', () => {
     expect(year.traditionalBalance).toBe(100000);
     expect(year.brokerageBalance).toBe(30000);
   });
+
+  it('taxes reinvested dividends annually and adds them to cost basis', () => {
+    const [year] = simulateConversionStrategy({
+      accounts: [{ type: 'brokerage', balance: 100000, costBasis: 100000, snapshotDate: '2026-01-01' }],
+      strategy: { mode: 'none' },
+      currentAge: 60,
+      endAge: 60,
+      birthYear: 1966,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      retirementAge: 60,
+      dividendYield: 0.02,
+    });
+
+    // $2,000 of dividends taxed at 15% = $300, paid from brokerage; the reinvested
+    // dividends raise basis, capped at the remaining balance.
+    expect(year.totalTax).toBe(300);
+    expect(year.brokerageBalance).toBe(99700);
+    expect(year.brokerageBasis).toBe(99700);
+  });
 });

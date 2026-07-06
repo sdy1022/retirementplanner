@@ -32,6 +32,7 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
           <mat-form-field><mat-label>State tax rate</mat-label><input matInput type="number" step="0.01" formControlName="stateTaxRate" /></mat-form-field>
           <mat-form-field><mat-label>Residual tax rate (heirs/liquidation)</mat-label><input matInput type="number" step="0.01" formControlName="residualTaxRate" /></mat-form-field>
           <mat-form-field><mat-label>Brokerage gains tax (0 = heir step-up)</mat-label><input matInput type="number" step="0.01" formControlName="brokerageGainsTaxRate" /></mat-form-field>
+          <mat-form-field><mat-label>Dividend yield (part of return)</mat-label><input matInput type="number" step="0.001" formControlName="dividendYield" /></mat-form-field>
           <mat-form-field>
             <mat-label>Filing status</mat-label>
             <mat-select formControlName="filingStatus">
@@ -108,6 +109,7 @@ export class ScenarioBuilder {
     residualTaxRate: [this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE],
     allowPreRetirementConversions: [this.state.scenario().allowPreRetirementConversions ?? false],
     brokerageGainsTaxRate: [this.state.scenario().brokerageGainsTaxRate ?? 0],
+    dividendYield: [this.state.scenario().dividendYield ?? 0.015],
     filingStatus: [this.state.scenario().filingStatus, Validators.required],
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [this.state.scenario().rothConversionStrategy.mode === 'fixed-amount' ? (this.state.scenario().rothConversionStrategy as any).amount : 25000],
@@ -150,6 +152,7 @@ export class ScenarioBuilder {
       allowPreRetirementConversions: value.allowPreRetirementConversions,
       annualWageGrowth: value.annualWageGrowth,
       brokerageGainsTaxRate: value.brokerageGainsTaxRate,
+      dividendYield: value.dividendYield,
     };
 
     const now = new Date().toISOString().split('T')[0];

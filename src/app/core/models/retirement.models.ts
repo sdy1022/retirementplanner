@@ -56,6 +56,10 @@ export interface Scenario {
   // Tax rate applied to unrealized brokerage gains remaining at the end of the plan.
   // 0 (default) models the step-up in basis heirs receive; ~0.15 models spending it yourself.
   brokerageGainsTaxRate?: number;
+  // Portion of the brokerage return paid out as dividends each year (e.g. 0.015 = 1.5%).
+  // Taxed annually at the qualified-dividend rate even when reinvested; reinvestment
+  // raises cost basis. Carved out of assumedReturnRate, not added on top.
+  dividendYield?: number;
 }
 
 export type SpendingOrder = 'traditional-first' | 'brokerage-first';

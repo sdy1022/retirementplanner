@@ -85,6 +85,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       allowPreRetirementConversions: scenario.allowPreRetirementConversions,
       annualWageGrowth: scenario.annualWageGrowth,
       spendingOrder: scenario.spendingOrder,
+      dividendYield: scenario.dividendYield,
     });
   };
 
