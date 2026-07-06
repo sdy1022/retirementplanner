@@ -3,7 +3,18 @@ import { simulateConversionStrategy } from './roth-conversion-calculator';
 import { getTaxTable, IRMAA_TIERS } from './tax-tables';
 import { getRmdStartAge } from './rmd-calculator';
 
+// Assumed tax rate on traditional dollars remaining at the end of the plan (heirs/liquidation),
+// used to compare pre-tax and after-tax dollars honestly in scoring and reporting
+export const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
+
 export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
+  const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+  // After-tax score: leftover traditional is discounted by the residual liquidation rate
+  // so pre-tax dollars don't count as full value when comparing candidate strategies
+  const afterTaxScore = (years: YearResult[]) => {
+    const last = years.at(-1)!;
+    return last.endingAssets - last.traditionalBalance * residualRate;
+  };
   const runWithStrategy = (strategy: RothConversionStrategy) => {
     return simulateConversionStrategy({
       accounts,
@@ -58,18 +69,18 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
   if (scenario.rothConversionStrategy.mode === 'smooth-to-bracket') {
     const targetBracket = scenario.rothConversionStrategy.targetBracket;
     const rmdStartAge = getRmdStartAge(scenario.birthYear);
-    
+
     let bestAmount = 600000; // default to max if we can't solve it
     let bestYears: YearResult[] | null = null;
-    
+
     // We want the lowest possible flat amount that successfully keeps all RMD years <= targetBracket
     for (let amt = 600000; amt >= 10000; amt -= 2000) {
       const years = runWithStrategy({ mode: 'fixed-amount', amount: amt, stopAtRmdAge: true });
-      
+
       // Check if any RMD year exceeds the target bracket
       const rmdYears = years.filter(y => y.age >= rmdStartAge);
       const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
-      
+
       if (maxRate <= targetBracket) {
         // This amount successfully keeps us in the bracket!
         bestAmount = amt;
@@ -78,11 +89,27 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
         // As we decrease the amount, the traditional balance gets larger. 
         // If this amount fails, lower amounts will also fail (because traditional balance will be even higher).
         // So the last successful amount was the optimal (lowest) one!
-        break; 
+        break;
       }
     }
-    
-    const finalYears = bestYears || runWithStrategy({ mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: true });
+
+    let finalYears = bestYears || runWithStrategy({ mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: true });
+
+    // The solved flat amount stops at RMD age; also score continuing it into the RMD years
+    // (all of them, or just the first 5/10) and keep whichever after-tax result is best
+    // while still respecting the target bracket in every RMD year.
+    let bestScore = afterTaxScore(finalYears);
+    for (const conversionStopAge of [rmdStartAge + 5, rmdStartAge + 10, undefined]) {
+      const years = runWithStrategy({ mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: false, conversionStopAge });
+      const rmdYears = years.filter(y => y.age >= rmdStartAge);
+      if (rmdYears.some(y => y.marginalRate > targetBracket)) continue;
+      const score = afterTaxScore(years);
+      if (score > bestScore) {
+        bestScore = score;
+        finalYears = years;
+      }
+    }
+
     return {
       scenarioName: scenario.name,
       years: finalYears,
@@ -103,11 +130,20 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
     // unconverted so later years drain it through the low brackets instead of paying
     // conversion-rate tax up front. Scored by after-tax ending assets: leftover traditional
     // is discounted by an assumed liquidation rate so pre-tax dollars don't count as full value.
-    const RESIDUAL_TRADITIONAL_TAX_RATE = 0.24;
     const candidateBrackets = table.brackets.filter(b => b.rate >= targetBracket && Number.isFinite(b.max));
     let bestYears: YearResult[] | null = null;
 
     const irmaaThresholds = IRMAA_TIERS[scenario.filingStatus].map(t => t.magiThreshold);
+
+    // Once RMDs start, either stop conversions entirely, keep topping off the bracket
+    // alongside the RMD for the rest of the plan, or top off only the first 5/10 RMD years —
+    // late-life conversions rarely live long enough to pay back their upfront tax.
+    const rmdBehaviors: { stopAtRmdAge: boolean; conversionStopAge?: number }[] = [
+      { stopAtRmdAge: true },
+      { stopAtRmdAge: false },
+      { stopAtRmdAge: false, conversionStopAge: rmdStartAge + 5 },
+      { stopAtRmdAge: false, conversionStopAge: rmdStartAge + 10 },
+    ];
 
     for (const bracket of candidateBrackets) {
       const bracketCeiling = bracket.max + table.standardDeduction;
@@ -122,17 +158,18 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
 
       for (const targetIncome of ceilings) {
         for (let floor = 0; floor <= 2500000; floor += 50000) {
-          const years = runWithStrategy({ mode: 'fill-to-income', targetIncome, stopAtRmdAge: true, preserveFloor: floor });
+          for (const behavior of rmdBehaviors) {
+            const years = runWithStrategy({ mode: 'fill-to-income', targetIncome, preserveFloor: floor, ...behavior });
 
-          const rmdYears = years.filter(y => y.age >= rmdStartAge);
-          const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
-          if (maxRate > bracket.rate) continue;
+            const rmdYears = years.filter(y => y.age >= rmdStartAge);
+            const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
+            if (maxRate > bracket.rate) continue;
 
-          const last = years.at(-1)!;
-          const score = last.endingAssets - last.traditionalBalance * RESIDUAL_TRADITIONAL_TAX_RATE;
-          if (score > bestScore) {
-            bestScore = score;
-            bracketBest = years;
+            const score = afterTaxScore(years);
+            if (score > bestScore) {
+              bestScore = score;
+              bracketBest = years;
+            }
           }
         }
       }

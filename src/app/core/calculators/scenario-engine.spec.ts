@@ -161,4 +161,93 @@ describe('scenario-engine', () => {
     // above the $167k tier but not above $200k -> $352.90/mo * 12 = $4,234.80.
     expect(byAge.get(65)!.irmaa).toBe(4234.8);
   });
+
+  it('fill-to-income keeps converting past RMD age until conversionStopAge', () => {
+    const scenario: Scenario = {
+      name: 'Post-RMD top-off',
+      currentAge: 74,
+      retirementAge: 74,
+      birthYear: 1962, // RMD start age 75 under SECURE 2.0
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 78,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 100000, stopAtRmdAge: false, conversionStopAge: 77 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+    };
+
+    const result = runScenario(scenario, [{ type: 'traditional_ira', balance: 1000000, snapshotDate: '2026-01-01' }]);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+
+    // Before RMDs the conversion fills straight to the income target.
+    expect(byAge.get(74)!.conversion).toBe(100000);
+    // In RMD years the conversion only tops off the remaining room above the RMD.
+    const y75 = byAge.get(75)!;
+    expect(y75.rmd).toBeGreaterThan(0);
+    expect(y75.conversion).toBe(100000 - y75.rmd);
+    // From conversionStopAge on, conversions cease while RMDs continue.
+    expect(byAge.get(77)!.conversion).toBe(0);
+    expect(byAge.get(77)!.rmd).toBeGreaterThan(0);
+  });
+
+  it('smooth-income-target tops off the bracket in RMD years when the residual tax rate makes it worthwhile', () => {
+    const scenario: Scenario = {
+      name: 'Post-RMD optimizer',
+      currentAge: 70,
+      retirementAge: 70,
+      birthYear: 1962,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 90,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
+      assumedReturnRate: 0.05,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+      // Traditional dollars left behind are assumed to be liquidated at 50%,
+      // so converting at 24% during RMD years is clearly better than stopping.
+      residualTaxRate: 0.5,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 2000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 1000000, snapshotDate: '2026-01-01' },
+    ]);
+
+    const rmdYears = result.years.filter(y => y.age >= 75);
+    // At least the early RMD years keep converting on top of the RMD...
+    expect(rmdYears.some(y => y.conversion > 0)).toBeTrue();
+    // ...without ever spilling past the target bracket.
+    for (const year of rmdYears) {
+      expect(year.marginalRate).toBeLessThanOrEqual(0.24);
+    }
+  });
+
+  it('reports a shortfall when no account can fund the year', () => {
+    const scenario: Scenario = {
+      name: 'Underfunded',
+      currentAge: 60,
+      retirementAge: 60,
+      birthYear: 1966,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 60,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 50000,
+    };
+
+    const result = runScenario(scenario, [{ type: 'brokerage', balance: 20000, snapshotDate: '2026-01-01' }]);
+
+    // $50k of expenses against $20k of total assets: $30k has no funding source.
+    expect(result.years[0].shortfall).toBe(30000);
+    expect(result.years[0].endingAssets).toBe(0);
+  });
 });

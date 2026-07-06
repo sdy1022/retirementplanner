@@ -18,10 +18,10 @@ export interface TaxBracket {
 
 export type RothConversionStrategy =
   | { mode: 'none' }
-  | { mode: 'fixed-amount'; amount: number; stopAtRmdAge?: boolean }
+  | { mode: 'fixed-amount'; amount: number; stopAtRmdAge?: boolean; conversionStopAge?: number }
   | { mode: 'fill-to-bracket'; targetBracket: number }
   | { mode: 'smooth-to-bracket'; targetBracket: number }
-  | { mode: 'fill-to-income'; targetIncome: number; stopAtRmdAge?: boolean; preserveFloor?: number }
+  | { mode: 'fill-to-income'; targetIncome: number; stopAtRmdAge?: boolean; conversionStopAge?: number; preserveFloor?: number }
   | { mode: 'smooth-income-target'; targetBracket: number }
   | { mode: 'auto-optimize' };
 
@@ -41,6 +41,9 @@ export interface Scenario {
   stateTaxRate: number;
   wageIncome: number;
   annualLivingExpenses: number;
+  // Tax rate assumed on traditional dollars left at the end of the plan (heirs/liquidation);
+  // drives the after-tax score that picks between conversion strategies. Defaults to 24%.
+  residualTaxRate?: number;
 }
 
 export interface RmdYearEntry {
@@ -62,6 +65,7 @@ export interface YearResult {
   stateTax: number;
   totalTax: number;
   irmaa: number;
+  shortfall: number;
   marginalRate: number;
   livingExpenses: number;
   endingAssets: number;

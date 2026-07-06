@@ -89,6 +89,14 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
         status: 'info'
       });
     }
+
+    if (year.shortfall > 0) {
+      steps.push({
+        age: year.age,
+        message: `⚠ Underfunded: $${year.shortfall.toLocaleString()} of expenses/taxes could not be covered by any account this year. The plan is not feasible as modeled.`,
+        status: 'danger'
+      });
+    }
   }
 
   return steps;

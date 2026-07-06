@@ -109,20 +109,33 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
 
     const totalOutflow = roundCurrency(totalTax + irmaa);
     let actualRothDeposit = conversion;
+    let unpaidOutflow = 0;
     if (brokerageBalance >= totalOutflow) {
       brokerageBalance = roundCurrency(brokerageBalance - totalOutflow);
     } else {
       const unpaidTax = roundCurrency(totalOutflow - brokerageBalance);
       brokerageBalance = 0;
       actualRothDeposit = Math.max(0, conversion - unpaidTax);
+      // Whatever the conversion withholding couldn't cover has no funding source
+      unpaidOutflow = roundCurrency(Math.max(0, unpaidTax - conversion));
     }
     rothBalance += actualRothDeposit;
     // Tax payments draw down basis first (untaxed); keep basis within the remaining balance
     brokerageBasis = Math.min(brokerageBasis, brokerageBalance);
 
+    // Taxes still unpaid after brokerage and conversion withholding come from Roth
+    // (a tax-free withdrawal), so a wealthy plan is not flagged as underfunded
+    const rothForTax = Math.min(rothBalance, unpaidOutflow);
+    rothBalance = roundCurrency(rothBalance - rothForTax);
+    unpaidOutflow = roundCurrency(unpaidOutflow - rothForTax);
+
     // Last-resort Roth withdrawal if brokerage and traditional couldn't cover the spending need
     const fromRoth = Math.min(rothBalance, spendingNeed - fromBrokerage - fromTraditional);
     rothBalance = Math.max(0, rothBalance - fromRoth);
+
+    // Expenses or taxes no account could fund — surfaced so an infeasible plan is visible
+    const unfundedExpenses = Math.max(0, spendingNeed - fromBrokerage - fromTraditional - fromRoth);
+    const shortfall = roundCurrency(unpaidOutflow + unfundedExpenses);
 
     traditionalBalance = roundCurrency(traditionalBalance * (1 + input.assumedReturnRate));
     rothBalance = roundCurrency(rothBalance * (1 + input.assumedReturnRate));
@@ -140,6 +153,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       stateTax,
       totalTax,
       irmaa,
+      shortfall,
       marginalRate,
       livingExpenses,
       endingAssets: roundCurrency(traditionalBalance + rothBalance + brokerageBalance),
@@ -155,10 +169,12 @@ function conversionAmount(strategy: RothConversionStrategy, taxableIncome: numbe
   }
   if (strategy.mode === 'fixed-amount') {
     if (strategy.stopAtRmdAge && age >= rmdStartAge) return 0;
+    if (strategy.conversionStopAge !== undefined && age >= strategy.conversionStopAge) return 0;
     return Math.max(0, strategy.amount);
   }
   if (strategy.mode === 'fill-to-income') {
     if (strategy.stopAtRmdAge && age >= rmdStartAge) return 0;
+    if (strategy.conversionStopAge !== undefined && age >= strategy.conversionStopAge) return 0;
     return Math.max(0, strategy.targetIncome - taxableIncome);
   }
   if (strategy.mode === 'auto-optimize' || strategy.mode === 'smooth-income-target') {
