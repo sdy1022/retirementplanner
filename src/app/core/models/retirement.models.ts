@@ -44,6 +44,9 @@ export interface Scenario {
   // Tax rate assumed on traditional dollars left at the end of the plan (heirs/liquidation);
   // drives the after-tax score that picks between conversion strategies. Defaults to 24%.
   residualTaxRate?: number;
+  // Allow conversions during working years, using whatever bracket room remains above
+  // wage income. The plan is charged only the incremental tax the conversion causes.
+  allowPreRetirementConversions?: boolean;
 }
 
 export interface RmdYearEntry {

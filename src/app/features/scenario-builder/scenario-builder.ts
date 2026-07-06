@@ -2,6 +2,7 @@ import { Component, effect, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -11,7 +12,7 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
 
 @Component({
   selector: 'app-scenario-builder',
-  imports: [ReactiveFormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [ReactiveFormsModule, MatButtonModule, MatCardModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <mat-card class="panel">
       <mat-card-header><mat-card-title>Scenario Builder</mat-card-title></mat-card-header>
@@ -43,7 +44,7 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
               <mat-option value="fixed-amount">Fixed amount</mat-option>
               <mat-option value="fill-to-bracket">Fill to bracket (Max out each year)</mat-option>
               <mat-option value="smooth-to-bracket">Smooth to bracket (Optimal fixed amount)</mat-option>
-              <mat-option value="smooth-income-target">Smooth income target (Flat total income)</mat-option>
+              <mat-option value="smooth-income-target">Smooth income target (Recommended / Default)</mat-option>
               <mat-option value="auto-optimize">Auto-Optimize (Max Ending Assets)</mat-option>
             </mat-select>
           </mat-form-field>
@@ -53,6 +54,7 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
           <mat-form-field><mat-label>Roth Balance</mat-label><input matInput type="number" formControlName="rothBalance" /></mat-form-field>
           <mat-form-field><mat-label>Brokerage Balance</mat-label><input matInput type="number" formControlName="brokerageBalance" /></mat-form-field>
           <mat-form-field><mat-label>Brokerage Cost Basis</mat-label><input matInput type="number" formControlName="brokerageCostBasis" /></mat-form-field>
+          <mat-checkbox formControlName="allowPreRetirementConversions">Convert during working years (uses bracket room above wages)</mat-checkbox>
           <button mat-flat-button type="submit" [disabled]="form.invalid">Run Scenario</button>
         </form>
       </mat-card-content>
@@ -101,6 +103,7 @@ export class ScenarioBuilder {
     assumedReturnRate: [this.state.scenario().assumedReturnRate, Validators.required],
     stateTaxRate: [this.state.scenario().stateTaxRate],
     residualTaxRate: [this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE],
+    allowPreRetirementConversions: [this.state.scenario().allowPreRetirementConversions ?? false],
     filingStatus: [this.state.scenario().filingStatus, Validators.required],
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [this.state.scenario().rothConversionStrategy.mode === 'fixed-amount' ? (this.state.scenario().rothConversionStrategy as any).amount : 25000],
@@ -140,6 +143,7 @@ export class ScenarioBuilder {
       assumedReturnRate: value.assumedReturnRate,
       stateTaxRate: value.stateTaxRate,
       residualTaxRate: value.residualTaxRate,
+      allowPreRetirementConversions: value.allowPreRetirementConversions,
     };
 
     const now = new Date().toISOString().split('T')[0];

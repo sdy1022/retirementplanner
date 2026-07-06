@@ -30,6 +30,7 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
       retirementAge: scenario.retirementAge,
       ssPia: scenario.ssPia,
       ssClaimAge: scenario.ssClaimAge,
+      allowPreRetirementConversions: scenario.allowPreRetirementConversions,
     });
   };
 

@@ -228,6 +228,76 @@ describe('scenario-engine', () => {
     }
   });
 
+  it('converts during working years up to the target income above wages when allowed', () => {
+    const scenario: Scenario = {
+      name: 'Pre-retirement conversion',
+      currentAge: 53,
+      retirementAge: 60,
+      birthYear: 1973,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 53,
+      filingStatus: 'single',
+      // 22% bracket gross ceiling: $103,350 taxable + $15,000 standard deduction
+      rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 118350 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 80000,
+      annualLivingExpenses: 0,
+      allowPreRetirementConversions: true,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 500000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' },
+    ]);
+
+    const [year] = result.years;
+    // Conversion fills the room above wages: $118,350 - $80,000.
+    expect(year.conversion).toBe(38350);
+    // The plan pays only the incremental tax the conversion causes on top of wages:
+    // tax($118,350) - tax($80,000) = $17,651 - $9,214 = $8,437, funded from brokerage.
+    expect(year.federalTax).toBe(8437);
+    expect(year.brokerageBalance).toBe(91563);
+    expect(year.rothBalance).toBe(38350);
+    expect(year.traditionalBalance).toBe(461650);
+  });
+
+  it('smooth-income-target uses working years when pre-retirement conversions are allowed', () => {
+    const scenario: Scenario = {
+      name: 'Working-year 22% fill',
+      currentAge: 53,
+      retirementAge: 60,
+      birthYear: 1973,
+      ssClaimAge: 67,
+      ssPia: 2000,
+      lifeExpectancy: 90,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.22 },
+      assumedReturnRate: 0.05,
+      stateTaxRate: 0,
+      wageIncome: 80000,
+      annualLivingExpenses: 0,
+      allowPreRetirementConversions: true,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 1500000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 400000, snapshotDate: '2026-01-01' },
+    ]);
+
+    // Working years (53-59) convert into the room above wages instead of sitting idle.
+    const workingYears = result.years.filter(y => y.age < 60);
+    expect(workingYears.some(y => y.conversion > 0)).toBeTrue();
+
+    // Without the flag, working years convert nothing and end with less after-tax wealth.
+    const gated = runScenario({ ...scenario, allowPreRetirementConversions: false }, [
+      { type: 'traditional_ira', balance: 1500000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 400000, snapshotDate: '2026-01-01' },
+    ]);
+    expect(gated.years.filter(y => y.age < 60).every(y => y.conversion === 0)).toBeTrue();
+  });
+
   it('reports a shortfall when no account can fund the year', () => {
     const scenario: Scenario = {
       name: 'Underfunded',

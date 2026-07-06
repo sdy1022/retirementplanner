@@ -19,6 +19,7 @@ export interface ConversionSimulationInput {
   ssPia?: number;
   ssClaimAge?: number;
   taxYear?: number;
+  allowPreRetirementConversions?: boolean;
 }
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
@@ -81,20 +82,33 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
 
     const baseTaxableIncome = baseIncomeBeforeWithdrawals + fromTraditional;
 
-    // Only convert if retired (since in working years wages likely fill low brackets).
+    // By default only convert once retired (wages likely fill the low brackets); with
+    // allowPreRetirementConversions, working years use whatever room remains above wages.
     // A preserve floor keeps part of the traditional balance unconverted so later years
     // can drain it through the low brackets instead of paying conversion-rate tax now.
+    const canConvert = isRetired || (input.allowPreRetirementConversions ?? false);
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
-    const conversion = isRetired ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
+    const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
     const taxableIncome = baseTaxableIncome + conversion;
     const stateTaxableIncome = Math.max(0, taxableIncome - table.standardDeduction);
     const brokerageGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
     const capitalGainsFederalTax = roundCurrency(realizedGain * LONG_TERM_CAPITAL_GAINS_RATE);
     const capitalGainsStateTax = roundCurrency(realizedGain * input.stateTaxRate);
-    const federalTax = isRetired ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax) : 0;
-    const stateTax = isRetired ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax) : 0;
+    // Working years: wages cover their own taxes, so the plan is charged only the
+    // incremental tax the conversion adds on top of wage income.
+    const federalTax = isRetired
+      ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax)
+      : conversion > 0
+        ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(baseTaxableIncome, input.filingStatus, taxYear, inflationFactor))
+        : 0;
+    const baseStateTaxableIncome = Math.max(0, baseTaxableIncome - table.standardDeduction);
+    const stateTax = isRetired
+      ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax)
+      : conversion > 0
+        ? roundCurrency((stateTaxableIncome - baseStateTaxableIncome) * input.stateTaxRate)
+        : 0;
     const totalTax = roundCurrency(federalTax + stateTax);
     const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
 
