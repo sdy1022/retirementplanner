@@ -78,6 +78,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       assumedReturnRate: scenario.assumedReturnRate,
       stateTaxRate: scenario.stateTaxRate,
       wageIncome: scenario.wageIncome,
+      annualOtherIncome: scenario.annualOtherIncome,
       annualLivingExpenses: scenario.annualLivingExpenses,
       retirementAge: scenario.retirementAge,
       ssPia: scenario.ssPia,

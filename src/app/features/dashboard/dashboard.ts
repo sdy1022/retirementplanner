@@ -4,6 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
 import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
+import { DEFAULT_TAX_YEAR } from '../../core/calculators/tax-tables';
 import { ScenarioResult, YearResult } from '../../core/models/retirement.models';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculators/rmd-calculator';
@@ -20,6 +21,8 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <span class="divider">|</span>
           <strong>Total assets at age {{ finalAge() }}:</strong>
           <strong>{{ result().endingAssets | currency }}</strong>
+          <span class="divider">|</span>
+          <span class="data-year">Tax data year: {{ taxDataYear }} (IRS Rev. Proc. 2025-32; CMS 2026 IRMAA)</span>
         </mat-card-content>
       </mat-card>
     </section>
@@ -102,6 +105,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .rmd-banner { margin-bottom: 20px; }
     .rmd-banner mat-card-content { min-height: unset; padding: 14px 16px; font-size: 1.05rem; }
     .rmd-banner .divider { margin: 0 10px; color: #b0bac4; }
+    .rmd-banner .data-year { color: #5a6b7c; font-size: 0.9rem; }
     .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
     .advice, .action-plan { margin-bottom: 20px; }
     .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
@@ -120,6 +124,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 })
 export class Dashboard {
   private readonly state = inject(LocalStateService);
+  readonly taxDataYear = DEFAULT_TAX_YEAR;
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
   readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));
