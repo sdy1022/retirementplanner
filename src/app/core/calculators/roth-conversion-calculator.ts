@@ -1,5 +1,6 @@
 import { AccountSnapshot, FilingStatus, RothConversionStrategy, SpendingOrder, YearResult } from '../models/retirement.models';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
+import { taxableSocialSecurity } from './social-security-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
 import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
 
@@ -49,26 +50,33 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   const results: YearResult[] = [];
   const rmdStartAge = getRmdStartAge(input.birthYear);
   const magiByAge = new Map<number, number>();
+  // Simulate whole attained-age years: fractional input ages are floored so table lookups
+  // (RMD divisors, bracket indexing) always see integer ages instead of falling through
+  const startAge = Math.floor(input.currentAge);
+  const lastAge = Math.floor(input.endAge);
 
-  for (let age = input.currentAge; age <= input.endAge; age++) {
+  for (let age = startAge; age <= lastAge; age++) {
     const isRetired = input.retirementAge ? age >= input.retirementAge : true;
     // Wages grow by a flat dollar raise each working year
-    const currentWage = isRetired ? 0 : Math.max(0, (input.wageIncome ?? 0) + (input.annualWageGrowth ?? 0) * (age - input.currentAge));
+    const currentWage = isRetired ? 0 : Math.max(0, (input.wageIncome ?? 0) + (input.annualWageGrowth ?? 0) * (age - startAge));
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
+    // Beginning-of-year balance (≈ prior Dec 31 after growth), matching the IRS RMD basis
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
     const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;
-    const taxableSsIncome = roundCurrency(ssIncome * 0.85);
+    // Sizing pass assumes the 85% cap (true whenever conversions/RMDs fill the brackets);
+    // the exact provisional-income amount is computed once withdrawals are known
+    const taxableSsEstimate = roundCurrency(ssIncome * 0.85);
     const taxYear = input.taxYear ?? 2026;
     // Index brackets and standard deduction to the simulated year so frozen base-year
     // brackets don't create artificial bracket creep against inflating balances/expenses
-    const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, age - input.currentAge);
+    const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, age - startAge);
     const table = getTaxTable(taxYear, input.filingStatus, inflationFactor);
 
     // Living expenses are covered by SS and RMD cash first, then traditional withdrawals up to the
     // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
     // then Roth. All traditional slices are ordinary income, so they join the tax base before the
     // conversion decision and consume bracket room that would otherwise go to conversions.
-    const expenseBaseAge = input.retirementAge ?? input.currentAge;
+    const expenseBaseAge = Math.floor(input.retirementAge ?? input.currentAge);
     const livingExpenses = isRetired
       ? roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, age - expenseBaseAge))
       : 0;
@@ -76,7 +84,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const rmdSpentOnExpenses = Math.min(rmd, Math.max(0, livingExpenses - ssIncome));
     const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
 
-    const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsIncome + rmd;
+    const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsEstimate + rmd;
     const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear, inflationFactor) + table.standardDeduction;
     const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
     // 'brokerage-first' skips the low-bracket harvest so conversions get the bracket room instead
@@ -97,8 +105,14 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
     const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
-    const taxableIncome = baseTaxableIncome + conversion;
-    const stateTaxableIncome = Math.max(0, taxableIncome - table.standardDeduction);
+    // Exact Social Security taxability via the provisional-income formula, now that all
+    // non-SS ordinary income is known (below the 85% sizing estimate in low-income years)
+    const nonSsOrdinaryIncome = currentWage + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
+    const taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, input.filingStatus));
+    const taxableIncome = roundCurrency(nonSsOrdinaryIncome + taxableSsIncome);
+    // State (e.g. Indiana): flat rate on ordinary income, Social Security exempt,
+    // no federal-style standard deduction
+    const stateTaxableIncome = Math.max(0, nonSsOrdinaryIncome);
     const brokerageGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
     const capitalGainsFederalTax = roundCurrency(realizedGain * LONG_TERM_CAPITAL_GAINS_RATE);
@@ -113,12 +127,11 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const federalTax = isRetired
       ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax + dividendFederalTax)
       : roundCurrency((conversion > 0
-          ? calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(baseTaxableIncome, input.filingStatus, taxYear, inflationFactor)
+          ? calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(taxableIncome - conversion, input.filingStatus, taxYear, inflationFactor)
           : 0) + dividendFederalTax);
-    const baseStateTaxableIncome = Math.max(0, baseTaxableIncome - table.standardDeduction);
     const stateTax = isRetired
       ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
-      : roundCurrency((conversion > 0 ? (stateTaxableIncome - baseStateTaxableIncome) * input.stateTaxRate : 0) + dividendStateTax);
+      : roundCurrency((conversion > 0 ? conversion * input.stateTaxRate : 0) + dividendStateTax);
     const totalTax = roundCurrency(federalTax + stateTax);
     const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
 
@@ -144,9 +157,15 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       taxFromBrokerage = brokerageBalance;
       const unpaidTax = roundCurrency(totalOutflow - brokerageBalance);
       brokerageBalance = 0;
-      actualRothDeposit = Math.max(0, conversion - unpaidTax);
-      // Whatever the conversion withholding couldn't cover has no funding source
-      unpaidOutflow = roundCurrency(Math.max(0, unpaidTax - conversion));
+      if (age >= 59.5) {
+        actualRothDeposit = Math.max(0, conversion - unpaidTax);
+        // Whatever the conversion withholding couldn't cover has no funding source
+        unpaidOutflow = roundCurrency(Math.max(0, unpaidTax - conversion));
+      } else {
+        // Before 59½, tax withheld from a conversion is itself an early distribution
+        // (penalty risk), so keep the conversion intact and let Roth/shortfall absorb it
+        unpaidOutflow = unpaidTax;
+      }
     }
     rothBalance += actualRothDeposit;
     // Tax payments draw down basis first (untaxed); keep basis within the remaining balance

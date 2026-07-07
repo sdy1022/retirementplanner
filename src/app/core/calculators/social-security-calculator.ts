@@ -1,3 +1,27 @@
+import { FilingStatus } from '../models/retirement.models';
+
+// IRS provisional-income thresholds for Social Security taxability (fixed by law, not indexed)
+const SS_TAX_THRESHOLDS: Record<FilingStatus, { base: number; upper: number }> = {
+  single: { base: 25000, upper: 34000 },
+  married_filing_jointly: { base: 32000, upper: 44000 },
+};
+
+// Taxable portion of Social Security under the IRS provisional-income formula:
+// 0% below the base threshold, up to 50% between thresholds, up to 85% above.
+export function taxableSocialSecurity(annualBenefit: number, otherOrdinaryIncome: number, filingStatus: FilingStatus): number {
+  if (annualBenefit <= 0) return 0;
+  const { base, upper } = SS_TAX_THRESHOLDS[filingStatus];
+  const provisionalIncome = otherOrdinaryIncome + annualBenefit / 2;
+  if (provisionalIncome <= base) return 0;
+  if (provisionalIncome <= upper) {
+    return Math.min(annualBenefit * 0.5, (provisionalIncome - base) * 0.5);
+  }
+  return Math.min(
+    annualBenefit * 0.85,
+    (provisionalIncome - upper) * 0.85 + Math.min(annualBenefit * 0.5, (upper - base) * 0.5),
+  );
+}
+
 export interface SocialSecurityComparison {
   age: 62 | 67 | 70;
   annualBenefit: number;
