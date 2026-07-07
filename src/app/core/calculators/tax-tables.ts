@@ -1,29 +1,31 @@
 import { FilingStatus, TaxBracket } from '../models/retirement.models';
 
+// Tax year 2026 per IRS Rev. Proc. 2025-32 (Oct 2025, reflects OBBBA amendments).
+// Note the bottom two brackets received an extra inflation adjustment under OBBBA.
 export const TAX_TABLES: Record<number, Record<FilingStatus, { standardDeduction: number; brackets: TaxBracket[] }>> = {
   2026: {
     single: {
-      standardDeduction: 15000,
+      standardDeduction: 16100,
       brackets: [
-        { rate: 0.1, min: 0, max: 11925 },
-        { rate: 0.12, min: 11925, max: 48475 },
-        { rate: 0.22, min: 48475, max: 103350 },
-        { rate: 0.24, min: 103350, max: 197300 },
-        { rate: 0.32, min: 197300, max: 250525 },
-        { rate: 0.35, min: 250525, max: 626350 },
-        { rate: 0.37, min: 626350, max: Number.POSITIVE_INFINITY },
+        { rate: 0.1, min: 0, max: 12400 },
+        { rate: 0.12, min: 12400, max: 50400 },
+        { rate: 0.22, min: 50400, max: 105700 },
+        { rate: 0.24, min: 105700, max: 201775 },
+        { rate: 0.32, min: 201775, max: 256225 },
+        { rate: 0.35, min: 256225, max: 640600 },
+        { rate: 0.37, min: 640600, max: Number.POSITIVE_INFINITY },
       ],
     },
     married_filing_jointly: {
-      standardDeduction: 30000,
+      standardDeduction: 32200,
       brackets: [
-        { rate: 0.1, min: 0, max: 23850 },
-        { rate: 0.12, min: 23850, max: 96950 },
-        { rate: 0.22, min: 96950, max: 206700 },
-        { rate: 0.24, min: 206700, max: 394600 },
-        { rate: 0.32, min: 394600, max: 501050 },
-        { rate: 0.35, min: 501050, max: 751600 },
-        { rate: 0.37, min: 751600, max: Number.POSITIVE_INFINITY },
+        { rate: 0.1, min: 0, max: 24800 },
+        { rate: 0.12, min: 24800, max: 100800 },
+        { rate: 0.22, min: 100800, max: 211400 },
+        { rate: 0.24, min: 211400, max: 403550 },
+        { rate: 0.32, min: 403550, max: 512450 },
+        { rate: 0.35, min: 512450, max: 768700 },
+        { rate: 0.37, min: 768700, max: Number.POSITIVE_INFINITY },
       ],
     },
   },
@@ -49,8 +51,10 @@ export function getTaxTable(year: number, filingStatus: FilingStatus, inflationF
   };
 }
 
-// Medicare IRMAA: combined Part B + Part D monthly surcharges per person (approximate 2026 values).
-// Premiums are cliff-based: crossing a MAGI threshold by $1 incurs the full tier surcharge.
+// Medicare IRMAA: combined Part B + Part D monthly surcharges per person for 2026
+// (CMS 2026 announcement: Part B standard $202.90, surcharges $81.20–$487.00;
+// Part D surcharges $14.50–$91.00). Premiums are cliff-based: crossing a MAGI
+// threshold by $1 incurs the full tier surcharge, based on MAGI from two years prior.
 export interface IrmaaTier {
   magiThreshold: number;
   monthlySurchargePerPerson: number;
@@ -58,18 +62,18 @@ export interface IrmaaTier {
 
 export const IRMAA_TIERS: Record<FilingStatus, IrmaaTier[]> = {
   single: [
-    { magiThreshold: 106000, monthlySurchargePerPerson: 87.7 },
-    { magiThreshold: 133000, monthlySurchargePerPerson: 220.3 },
-    { magiThreshold: 167000, monthlySurchargePerPerson: 352.9 },
-    { magiThreshold: 200000, monthlySurchargePerPerson: 485.5 },
-    { magiThreshold: 500000, monthlySurchargePerPerson: 529.7 },
+    { magiThreshold: 109000, monthlySurchargePerPerson: 95.7 },
+    { magiThreshold: 137000, monthlySurchargePerPerson: 240.3 },
+    { magiThreshold: 171000, monthlySurchargePerPerson: 385.0 },
+    { magiThreshold: 205000, monthlySurchargePerPerson: 529.7 },
+    { magiThreshold: 500000, monthlySurchargePerPerson: 578.0 },
   ],
   married_filing_jointly: [
-    { magiThreshold: 212000, monthlySurchargePerPerson: 87.7 },
-    { magiThreshold: 266000, monthlySurchargePerPerson: 220.3 },
-    { magiThreshold: 334000, monthlySurchargePerPerson: 352.9 },
-    { magiThreshold: 400000, monthlySurchargePerPerson: 485.5 },
-    { magiThreshold: 750000, monthlySurchargePerPerson: 529.7 },
+    { magiThreshold: 218000, monthlySurchargePerPerson: 95.7 },
+    { magiThreshold: 274000, monthlySurchargePerPerson: 240.3 },
+    { magiThreshold: 342000, monthlySurchargePerPerson: 385.0 },
+    { magiThreshold: 410000, monthlySurchargePerPerson: 529.7 },
+    { magiThreshold: 750000, monthlySurchargePerPerson: 578.0 },
   ],
 };
 

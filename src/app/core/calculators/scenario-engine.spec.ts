@@ -21,14 +21,14 @@ describe('scenario-engine', () => {
 
     const result = runScenario(scenario, [{ type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' }]);
 
-    // Year one: $20k conversion, taxable $5k after the $15k standard deduction -> $500 tax,
+    // Year one: $20k conversion, taxable $3.9k after the $16.1k standard deduction -> $390 tax,
     // withheld from the conversion because there is no brokerage balance to pay it from.
-    // Year two: the deduction indexes 3% to $15,450, so taxable is $4,550 -> $455 tax.
+    // Year two: the deduction indexes 3% to $16,583, so taxable is $3,417 -> $341.70 tax.
     expect(result.years.length).toBe(2);
-    expect(result.totalTax).toBe(955);
-    expect(result.endingAssets).toBe(49045);
+    expect(result.totalTax).toBe(731.7);
+    expect(result.endingAssets).toBe(49268.3);
     // No brokerage exists, so the tax is withheld from the conversion itself
-    expect(result.years[0].taxWithheldFromConversion).toBe(500);
+    expect(result.years[0].taxWithheldFromConversion).toBe(390);
     expect(result.years[0].taxFromBrokerage).toBe(0);
   });
 
@@ -128,11 +128,11 @@ describe('scenario-engine', () => {
 
     const [year] = result.years;
     // The $20k expense fits in the 12% low-bracket space, so it comes from traditional,
-    // not brokerage: $5k taxable after the $15k standard deduction -> $500 federal tax.
+    // not brokerage: $3.9k taxable after the $16.1k standard deduction -> $390 federal tax.
     expect(year.taxableIncome).toBe(20000);
-    expect(year.totalTax).toBe(500);
+    expect(year.totalTax).toBe(390);
     expect(year.traditionalBalance).toBe(80000);
-    expect(year.brokerageBalance).toBe(9500); // untouched except paying the tax
+    expect(year.brokerageBalance).toBe(9610); // untouched except paying the tax
   });
 
   it('charges Medicare IRMAA from 65 based on MAGI two years prior', () => {
@@ -162,8 +162,8 @@ describe('scenario-engine', () => {
     expect(byAge.get(63)!.irmaa).toBe(0);
     expect(byAge.get(64)!.irmaa).toBe(0);
     // At 65, the surcharge is driven by age-63 MAGI ($200k, single):
-    // above the $167k tier but not above $200k -> $352.90/mo * 12 = $4,234.80.
-    expect(byAge.get(65)!.irmaa).toBe(4234.8);
+    // above the $171k tier but not above $205k -> $385.00/mo * 12 = $4,620.
+    expect(byAge.get(65)!.irmaa).toBe(4620);
   });
 
   it('fill-to-income keeps converting past RMD age until conversionStopAge', () => {
@@ -241,7 +241,7 @@ describe('scenario-engine', () => {
       ssPia: 0,
       lifeExpectancy: 53,
       filingStatus: 'single',
-      // 22% bracket gross ceiling: $103,350 taxable + $15,000 standard deduction
+      // Income target below the 22% gross ceiling ($105,700 taxable + $16,100 deduction)
       rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 118350 },
       assumedReturnRate: 0,
       stateTaxRate: 0,
@@ -258,8 +258,8 @@ describe('scenario-engine', () => {
     const [year] = result.years;
     // Conversion fills the room above wages: $118,350 - $80,000.
     expect(year.conversion).toBe(38350);
-    // The plan pays only the incremental tax the conversion causes on top of wages:
-    // tax($118,350) - tax($80,000) = $17,651 - $9,214 = $8,437, funded from brokerage.
+    // The plan pays only the incremental tax the conversion causes on top of wages —
+    // the full $38,350 sits inside the 22% bracket: 0.22 * 38,350 = $8,437 from brokerage.
     expect(year.federalTax).toBe(8437);
     expect(year.brokerageBalance).toBe(91563);
     expect(year.rothBalance).toBe(38350);
@@ -309,7 +309,7 @@ describe('scenario-engine', () => {
       ssPia: 0,
       lifeExpectancy: 54,
       filingStatus: 'married_filing_jointly',
-      // 22% MFJ bracket gross ceiling: $206,700 taxable + $30,000 standard deduction
+      // Income target near the 22% MFJ gross ceiling ($211,400 taxable + $32,200 deduction)
       rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 236700 },
       assumedReturnRate: 0,
       stateTaxRate: 0,
@@ -378,7 +378,7 @@ describe('scenario-engine', () => {
       ssPia: 0,
       lifeExpectancy: 60,
       filingStatus: 'single',
-      // 12% bracket gross ceiling: $48,475 taxable + $15,000 standard deduction
+      // Income target below the 12% gross ceiling ($50,400 taxable + $16,100 deduction)
       rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 63475 },
       assumedReturnRate: 0,
       stateTaxRate: 0,
