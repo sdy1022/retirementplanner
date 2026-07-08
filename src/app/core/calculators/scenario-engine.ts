@@ -13,7 +13,7 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
   const afterTax = (r: ScenarioResult) => {
     const last = r.years.at(-1);
     if (!last) return 0;
-    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate;
+    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate - (last.sblocLoanBalance ?? 0);
   };
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
@@ -65,7 +65,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
   // pre-tax dollars don't count as full value when comparing candidate strategies
   const afterTaxScore = (years: YearResult[]) => {
     const last = years.at(-1)!;
-    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate;
+    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate - (last.sblocLoanBalance ?? 0);
   };
   const runWithStrategy = (strategy: RothConversionStrategy) => {
     return simulateConversionStrategy({
@@ -87,6 +87,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       annualWageGrowth: scenario.annualWageGrowth,
       spendingOrder: scenario.spendingOrder,
       dividendYield: scenario.dividendYield,
+      sblocTaxFunding: scenario.sblocTaxFunding,
     });
   };
 

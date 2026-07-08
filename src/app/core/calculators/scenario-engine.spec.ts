@@ -426,4 +426,91 @@ describe('scenario-engine', () => {
     expect(result.years[0].shortfall).toBe(30000);
     expect(result.years[0].endingAssets).toBe(0);
   });
+
+  describe('SBLOC tax funding (buy-borrow-die)', () => {
+    const scenario: Scenario = {
+      name: 'SBLOC taxes',
+      currentAge: 60,
+      retirementAge: 60,
+      birthYear: 1966,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 61,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 20000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+      sblocTaxFunding: { startAge: 60, endAge: 75, borrowRate: 0.07, maxLtv: 0.4 },
+    };
+
+    it('borrows the conversion tax, compounds interest, and leaves the brokerage untouched', () => {
+      const result = runScenario(scenario, [
+        { type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' },
+      ]);
+
+      // Year one: $390 conversion tax drawn on the line, none from brokerage.
+      expect(result.years[0].taxFromSbloc).toBe(390);
+      expect(result.years[0].taxFromBrokerage).toBe(0);
+      expect(result.years[0].sblocLoanBalance).toBe(390);
+      // Year two: 7% interest on $390, plus the $341.70 tax on the second conversion.
+      expect(result.years[1].sblocInterest).toBe(27.3);
+      expect(result.years[1].sblocLoanBalance).toBe(759);
+      // The brokerage never sold a share to pay conversion taxes.
+      expect(result.years[1].brokerageBalance).toBe(100000);
+      // endingAssets stays gross; the loan is reported separately for net-estate math.
+      expect(result.endingAssets).toBe(150000);
+    });
+
+    it('caps draws at maxLtv of the brokerage collateral and pays the excess in cash', () => {
+      const result = runScenario({ ...scenario, lifeExpectancy: 60 }, [
+        { type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 500, snapshotDate: '2026-01-01' },
+      ]);
+
+      // $390 of conversion tax, but 40% of $500 collateral only allows a $200 draw.
+      expect(result.years[0].taxFromSbloc).toBe(200);
+      expect(result.years[0].taxFromBrokerage).toBe(190);
+      // Paying the $190 cash tax shrank the collateral to $310, so the $200 loan breached
+      // the cap and was cured down: repay 76 / (1 − 0.4) = $126.67 from brokerage, leaving
+      // a $73.33 loan against $183.33 of collateral — exactly 40%.
+      expect(result.years[0].sblocPaydown).toBe(126.67);
+      expect(result.years[0].sblocLoanBalance).toBe(73.33);
+    });
+
+    it('force-pays the loan down from cash when spending erodes the collateral', () => {
+      const result = runScenario({ ...scenario, annualLivingExpenses: 1500, spendingOrder: 'brokerage-first' }, [
+        { type: 'traditional_401k', balance: 100000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 2000, snapshotDate: '2026-01-01' },
+      ]);
+
+      // Year one: expenses leave $500 of collateral, draw capped at $200, then the cash tax
+      // payment shrinks collateral further and the cure pays the loan down to $73.33.
+      expect(result.years[0].taxFromSbloc).toBe(200);
+      expect(result.years[0].sblocPaydown).toBe(126.67);
+      expect(result.years[0].sblocLoanBalance).toBe(73.33);
+      // Year two: expenses consume the rest of the brokerage, so no collateral remains —
+      // the loan (plus 7% interest) is fully repaid from the Roth backstop and BBD ends.
+      expect(result.years[1].brokerageBalance).toBe(0);
+      expect(result.years[1].taxFromSbloc).toBe(0);
+      expect(result.years[1].sblocInterest).toBe(5.13);
+      expect(result.years[1].sblocPaydown).toBe(78.46);
+      expect(result.years[1].sblocLoanBalance).toBe(0);
+    });
+
+    it('stops borrowing after the window but keeps accruing interest on the loan', () => {
+      const result = runScenario({ ...scenario, sblocTaxFunding: { startAge: 60, endAge: 60, borrowRate: 0.07 } }, [
+        { type: 'traditional_401k', balance: 50000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' },
+      ]);
+
+      // Age 61 is outside the window: tax reverts to the brokerage waterfall,
+      // while the age-60 loan still compounds at 7%.
+      expect(result.years[1].taxFromSbloc).toBe(0);
+      expect(result.years[1].taxFromBrokerage).toBe(341.7);
+      expect(result.years[1].sblocLoanBalance).toBe(417.3);
+    });
+  });
 });

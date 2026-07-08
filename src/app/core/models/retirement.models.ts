@@ -62,9 +62,24 @@ export interface Scenario {
   // Taxed annually at the qualified-dividend rate even when reinvested; reinvestment
   // raises cost basis. Carved out of assumedReturnRate, not added on top.
   dividendYield?: number;
+  // When set, conversion taxes inside the window are borrowed via SBLOC (Buy-Borrow-Die)
+  sblocTaxFunding?: SblocTaxFunding;
 }
 
 export type SpendingOrder = 'traditional-first' | 'brokerage-first';
+
+// Buy-Borrow-Die tax funding: within the age window, the conversion's incremental tax is
+// drawn on an SBLOC against the brokerage instead of selling shares. Interest compounds on
+// the outstanding balance and is never repaid — the estate settles the loan at death while
+// the unsold brokerage keeps its step-up in basis.
+export interface SblocTaxFunding {
+  startAge: number;
+  endAge: number;
+  borrowRate: number;
+  // Draws stop once the loan reaches this fraction of the brokerage collateral;
+  // the excess tax falls back to the normal cash waterfall. Default 0.4.
+  maxLtv?: number;
+}
 
 export interface RmdYearEntry {
   age: number;
@@ -101,6 +116,14 @@ export interface YearResult {
   taxFromBrokerage: number;
   taxWithheldFromConversion: number;
   taxFromRoth: number;
+  // SBLOC (Buy-Borrow-Die) tax funding; absent/0 when the scenario doesn't use it.
+  // endingAssets stays gross — subtract sblocLoanBalance for the net estate.
+  taxFromSbloc?: number;
+  sblocInterest?: number;
+  sblocLoanBalance?: number;
+  // Loan repaid this year (brokerage first, then Roth) because the collateral no longer
+  // supported the balance at maxLtv — the margin-call cure
+  sblocPaydown?: number;
 }
 
 export interface ScenarioResult {

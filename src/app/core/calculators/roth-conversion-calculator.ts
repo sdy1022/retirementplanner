@@ -1,4 +1,4 @@
-import { AccountSnapshot, FilingStatus, RothConversionStrategy, SpendingOrder, YearResult } from '../models/retirement.models';
+import { AccountSnapshot, FilingStatus, RothConversionStrategy, SblocTaxFunding, SpendingOrder, YearResult } from '../models/retirement.models';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { taxableSocialSecurity } from './social-security-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
@@ -24,7 +24,11 @@ export interface ConversionSimulationInput {
   annualWageGrowth?: number;
   spendingOrder?: SpendingOrder;
   dividendYield?: number;
+  sblocTaxFunding?: SblocTaxFunding;
 }
+
+// Loan draws stop once the SBLOC reaches this fraction of the brokerage collateral
+export const DEFAULT_SBLOC_MAX_LTV = 0.4;
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
 export const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
@@ -47,6 +51,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   // Cost basis defaults to the full balance (no embedded gain) when not provided;
   // growth increases the balance but not the basis, so gains accrue over the simulation.
   let brokerageBasis = sumCostBasis(input.accounts, ['brokerage']);
+  const sbloc = input.sblocTaxFunding;
+  let sblocLoanBalance = 0;
   const results: YearResult[] = [];
   const rmdStartAge = getRmdStartAge(input.birthYear);
   const magiByAge = new Map<number, number>();
@@ -147,7 +153,25 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Withdrawals consume basis pro rata; unspent RMD cash deposits carry full basis
     brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)) + rmd - rmdSpentOnExpenses);
 
-    const totalOutflow = roundCurrency(totalTax + irmaa);
+    // SBLOC (Buy-Borrow-Die) tax funding: interest compounds on the outstanding loan every
+    // year (never repaid — the estate settles it at death). Inside the window, the
+    // conversion's incremental tax is drawn on the line instead of selling brokerage,
+    // capped so the loan never exceeds maxLtv of the collateral.
+    const sblocInterest = sbloc ? roundCurrency(sblocLoanBalance * sbloc.borrowRate) : 0;
+    sblocLoanBalance = roundCurrency(sblocLoanBalance + sblocInterest);
+    let sblocDraw = 0;
+    if (sbloc && age >= sbloc.startAge && age <= sbloc.endAge && conversion > 0) {
+      const conversionTax = roundCurrency(
+        calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor)
+        - calculateTax(taxableIncome - conversion, input.filingStatus, taxYear, inflationFactor)
+        + conversion * input.stateTaxRate,
+      );
+      const ltvRoom = Math.max(0, (sbloc.maxLtv ?? DEFAULT_SBLOC_MAX_LTV) * brokerageBalance - sblocLoanBalance);
+      sblocDraw = roundCurrency(Math.min(conversionTax, totalTax + irmaa, ltvRoom));
+      sblocLoanBalance = roundCurrency(sblocLoanBalance + sblocDraw);
+    }
+
+    const totalOutflow = roundCurrency(totalTax + irmaa - sblocDraw);
     let taxFromBrokerage = totalOutflow;
     let actualRothDeposit = conversion;
     let unpaidOutflow = 0;
@@ -180,6 +204,27 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Last-resort Roth withdrawal if brokerage and traditional couldn't cover the spending need
     const fromRoth = Math.min(rothBalance, spendingNeed - fromBrokerage - fromTraditional);
     rothBalance = Math.max(0, rothBalance - fromRoth);
+
+    // Margin-call cure: draws respect the LTV cap, but spending can shrink the collateral
+    // afterward while the loan compounds. The lender forces a paydown — from brokerage first
+    // (selling collateral shrinks the denominator too, hence the 1 − maxLtv factor), then
+    // Roth as backstop — and the strategy continues with whatever loan is still supported.
+    // Like tax payments, cure sales draw down basis first.
+    let sblocPaydown = 0;
+    if (sbloc && sblocLoanBalance > 0) {
+      const maxLtvCap = sbloc.maxLtv ?? DEFAULT_SBLOC_MAX_LTV;
+      const breach = sblocLoanBalance - maxLtvCap * brokerageBalance;
+      if (breach > 0) {
+        const cureFromBrokerage = roundCurrency(Math.min(brokerageBalance, breach / (1 - maxLtvCap)));
+        brokerageBalance = roundCurrency(brokerageBalance - cureFromBrokerage);
+        brokerageBasis = Math.min(brokerageBasis, brokerageBalance);
+        const stillOwed = roundCurrency(sblocLoanBalance - cureFromBrokerage - maxLtvCap * brokerageBalance);
+        const cureFromRoth = roundCurrency(Math.min(rothBalance, Math.max(0, stillOwed)));
+        rothBalance = roundCurrency(rothBalance - cureFromRoth);
+        sblocPaydown = roundCurrency(cureFromBrokerage + cureFromRoth);
+        sblocLoanBalance = roundCurrency(Math.max(0, sblocLoanBalance - sblocPaydown));
+      }
+    }
 
     // Expenses or taxes no account could fund — surfaced so an infeasible plan is visible
     const unfundedExpenses = Math.max(0, spendingNeed - fromBrokerage - fromTraditional - fromRoth);
@@ -216,6 +261,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       taxFromBrokerage: roundCurrency(taxFromBrokerage),
       taxWithheldFromConversion: roundCurrency(Math.max(0, conversion - actualRothDeposit)),
       taxFromRoth: roundCurrency(rothForTax),
+      taxFromSbloc: sblocDraw,
+      sblocInterest,
+      sblocLoanBalance,
+      sblocPaydown,
     });
   }
 

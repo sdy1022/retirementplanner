@@ -81,6 +81,32 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
       </mat-card>
     </section>
 
+    <section class="summary">
+      <mat-card>
+        <mat-card-header><mat-card-title>SBLOC-Funded Conversion Taxes (BBD, ages {{ sblocStartAge }}–{{ sblocEndAge }})</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <div class="metric"><span>After-tax estate at {{ finalAge() }} (net of loan)</span><strong>{{ sblocAfterTax() | currency }}</strong></div>
+          <div class="metric"><span>SBLOC loan at death</span><strong>{{ sblocLoanAtDeath() | currency }}</strong></div>
+          <div class="metric sub"><span>… conversion tax borrowed</span><strong>{{ sblocTaxBorrowed() | currency }}</strong></div>
+          <div class="metric sub"><span>… interest accrued ({{ sblocBorrowRate * 100 | number: '1.0-0' }}%)</span><strong>{{ sblocInterestTotal() | currency }}</strong></div>
+          <div class="metric sub"><span>… paid down from cash (margin cures)</span><strong>{{ sblocPaydownTotal() | currency }}</strong></div>
+          <div class="metric"><span>Peak LTV (limit {{ sblocMaxLtv * 100 | number: '1.0-0' }}%)</span><strong>{{ sblocPeakLtv() * 100 | number: '1.0-1' }}%</strong></div>
+          <div class="metric sub"><span>Brokerage at {{ finalAge() }}</span><strong>{{ sblocFinalYear()?.brokerageBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Roth at {{ finalAge() }}</span><strong>{{ sblocFinalYear()?.rothBalance | currency }}</strong></div>
+        </mat-card-content>
+      </mat-card>
+      <mat-card>
+        <mat-card-header><mat-card-title>Pay Conversion Taxes in Cash (current strategy)</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <div class="metric"><span>After-tax estate at {{ finalAge() }}</span><strong>{{ resultAfterTax() | currency }}</strong></div>
+          <div class="metric"><span>Loan at death</span><strong>{{ 0 | currency }}</strong></div>
+          <div class="metric sub"><span>Brokerage at {{ finalAge() }}</span><strong>{{ resultFinalYear()?.brokerageBalance | currency }}</strong></div>
+          <div class="metric sub"><span>Roth at {{ finalAge() }}</span><strong>{{ resultFinalYear()?.rothBalance | currency }}</strong></div>
+          <p class="strategy-note">{{ sblocVerdict() }}</p>
+        </mat-card-content>
+      </mat-card>
+    </section>
+
     <section class="advice">
       <mat-card>
         <mat-card-header><mat-card-title>Optimization Advice & Insights</mat-card-title></mat-card-header>
@@ -155,6 +181,11 @@ export class Dashboard {
   readonly residualRateDefault = RESIDUAL_TRADITIONAL_TAX_RATE;
   // SBLOC borrow rate assumed for the Buy-Borrow-Die comparison; not a scenario input yet
   readonly sblocBorrowRate = 0.07;
+  // BBD tax-funding window and loan cap: conversion taxes from 60–75 are borrowed against
+  // the brokerage, and draws stop once the loan hits 40% of the collateral
+  readonly sblocStartAge = 60;
+  readonly sblocEndAge = 75;
+  readonly sblocMaxLtv = 0.4;
 
   // Per-bucket decision: Rule 1 compares today's conversion rate against the exit rate on
   // unconverted dollars; Rule 2 simulates borrow-vs-sell for the brokerage held to step-up.
@@ -195,6 +226,37 @@ export class Dashboard {
   });
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
+  // Same scenario, but conversion taxes in the window are borrowed via SBLOC instead of
+  // selling brokerage (Buy-Borrow-Die applied to the tax bill)
+  readonly sblocResult = computed(() => runScenario({
+    ...this.state.scenario(),
+    name: 'SBLOC-funded conversion taxes',
+    sblocTaxFunding: { startAge: this.sblocStartAge, endAge: this.sblocEndAge, borrowRate: this.sblocBorrowRate, maxLtv: this.sblocMaxLtv },
+  }, this.state.accounts()));
+  readonly sblocFinalYear = computed(() => this.sblocResult().years.at(-1));
+  readonly sblocAfterTax = computed(() => this.afterTaxEndingAssets(this.sblocResult()));
+  readonly sblocLoanAtDeath = computed(() => this.sblocFinalYear()?.sblocLoanBalance ?? 0);
+  readonly sblocInterestTotal = computed(() => this.sblocResult().years.reduce((sum, y) => sum + (y.sblocInterest ?? 0), 0));
+  readonly sblocTaxBorrowed = computed(() => this.sblocResult().years.reduce((sum, y) => sum + (y.taxFromSbloc ?? 0), 0));
+  readonly sblocPaydownTotal = computed(() => this.sblocResult().years.reduce((sum, y) => sum + (y.sblocPaydown ?? 0), 0));
+  readonly sblocPeakLtv = computed(() => this.sblocResult().years.reduce(
+    (peak, y) => Math.max(peak, y.brokerageBalance > 0 ? (y.sblocLoanBalance ?? 0) / y.brokerageBalance : 0), 0));
+  readonly sblocEdge = computed(() => this.sblocAfterTax() - this.resultAfterTax());
+  readonly sblocVerdict = computed(() => {
+    const edge = this.sblocEdge();
+    const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    // Margin calls are cured in-engine (loan paid down from brokerage, then Roth), so the
+    // LTV cap only stays breached when even the Roth backstop couldn't cover the cure
+    if (this.sblocPeakLtv() > this.sblocMaxLtv) {
+      return `⚠️ Not feasible: even after forced paydowns the loan exceeds ${Math.round(this.sblocMaxLtv * 100)}% of the collateral (peak ${Math.round(this.sblocPeakLtv() * 100)}%). A lender would liquidate before age ${this.finalAge()}, so the ${fmt.format(Math.abs(edge))} difference shown is not achievable.`;
+    }
+    const cureNote = this.sblocPaydownTotal() > 0
+      ? ` Note: staying under the ${Math.round(this.sblocMaxLtv * 100)}% LTV cap forced ${fmt.format(this.sblocPaydownTotal())} of loan paydowns from cash along the way.`
+      : '';
+    return (edge > 0
+      ? `✅ Borrowing the conversion tax wins: the untouched brokerage outgrows the ${Math.round(this.sblocBorrowRate * 100)}% loan, leaving ${fmt.format(edge)} more after tax at ${this.finalAge()}.`
+      : `❌ Paying the tax in cash wins: ${Math.round(this.sblocBorrowRate * 100)}% compounding loan interest costs ${fmt.format(-edge)} more than the gains tax and growth it avoids.`) + cureNote;
+  });
   readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));
   readonly assetChart = computed(() => {
     const res = this.result();
@@ -230,7 +292,8 @@ export class Dashboard {
     const residualRate = this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
     const gainsRate = this.state.scenario().brokerageGainsTaxRate ?? 0;
     const unrealizedGain = Math.max(0, (last?.brokerageBalance ?? 0) - (last?.brokerageBasis ?? 0));
-    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate - unrealizedGain * gainsRate;
+    // Any outstanding SBLOC loan is settled by the estate before anything passes to heirs
+    return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate - unrealizedGain * gainsRate - (last?.sblocLoanBalance ?? 0);
   }
   readonly traditionalAtRmdStart = computed(() => {
     const startYear = this.result().years.find(y => y.age === this.rmdStartAge());
