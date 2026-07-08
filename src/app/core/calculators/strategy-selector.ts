@@ -29,6 +29,13 @@ export interface StrategySelectorInput {
   yearsToDeath: number;
   /** Annual spending that must come from the brokerage bucket (sold or borrowed) */
   annualSpending: number;
+  /**
+   * Roth/cash reachable to pay down the loan if a stressed margin call hits. Retirement
+   * accounts can't be pledged as collateral (IRC §408(e) treats a pledged IRA as a
+   * distribution), so this never raises the LTV denominator — it only converts a stress
+   * breach from ruin (forced liquidation) into a curable, expensive event.
+   */
+  backstopLiquidAssets?: number;
   /** Charged on top of the borrow rate so r < m alone can't win on unpriced leverage; default 0.01 */
   riskPremium?: number;
   /** Max loan-to-value the lender allows; default 0.5 */
@@ -130,8 +137,9 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
   // Borrow path: assets untouched, debt compounds and funds the same spending
   let bbdBalance = input.brokerageBalance;
   let debt = 0;
-  let feasible = true;
   let peakStressedLtv = 0;
+  // Largest paydown needed to get back under the LTV cap in the stressed scenario
+  let maxCureNeeded = 0;
 
   for (let year = 1; year <= years; year++) {
     const gainFraction = sellBalance > 0 ? Math.max(0, sellBalance - sellBasis) / sellBalance : 0;
@@ -144,10 +152,14 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
 
     debt = debt * (1 + effectiveBorrowRate) + input.annualSpending;
     bbdBalance = bbdBalance * (1 + input.expectedReturnRate);
-    const stressedLtv = debt / (bbdBalance * (1 - stressDrawdown));
+    const stressedCollateral = bbdBalance * (1 - stressDrawdown);
+    const stressedLtv = debt / stressedCollateral;
     peakStressedLtv = Math.max(peakStressedLtv, stressedLtv);
-    if (stressedLtv > maxLtv) feasible = false;
+    maxCureNeeded = Math.max(maxCureNeeded, debt - maxLtv * stressedCollateral);
   }
+  const backstop = Math.max(0, input.backstopLiquidAssets ?? 0);
+  const curedByBackstop = maxCureNeeded > 0 && maxCureNeeded <= backstop;
+  const feasible = maxCureNeeded <= 0 || curedByBackstop;
 
   // Step-up at death wipes unrealized gains on both paths, so estates compare directly
   const sellEstate = sellBalance;
@@ -155,11 +167,16 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
   const value = roundCurrency(bbdEstate - sellEstate);
 
   if (!feasible) {
-    notes.push(`BBD infeasible: stressed LTV peaks at ${pct(peakStressedLtv)} (limit ${pct(maxLtv)} after a ${pct(stressDrawdown)} crash).`);
-  } else if (value > 0) {
-    notes.push(`Borrow-and-step-up leaves $${money(value)} more at death than gradual selling (peak stressed LTV ${pct(peakStressedLtv)}).`);
+    notes.push(`BBD infeasible: stressed LTV peaks at ${pct(peakStressedLtv)} (limit ${pct(maxLtv)} after a ${pct(stressDrawdown)} crash), and curing the margin call would take $${money(maxCureNeeded)} — more than the $${money(backstop)} backstop available.`);
   } else {
-    notes.push(`Gradual selling beats borrowing by $${money(-value)}: compounded interest outweighs the ${pct(input.capitalGainsRate)} gains tax avoided.`);
+    if (curedByBackstop) {
+      notes.push(`Caution: stressed LTV peaks at ${pct(peakStressedLtv)} (over the ${pct(maxLtv)} limit). BBD stays feasible only because up to $${money(maxCureNeeded)} of Roth/cash backstop could cure the margin call — a cure spends tax-free dollars to prop up leverage.`);
+    }
+    if (value > 0) {
+      notes.push(`Borrow-and-step-up leaves $${money(value)} more at death than gradual selling (peak stressed LTV ${pct(peakStressedLtv)}).`);
+    } else {
+      notes.push(`Gradual selling beats borrowing by $${money(-value)}: compounded interest outweighs the ${pct(input.capitalGainsRate)} gains tax avoided.`);
+    }
   }
   if (sellPathDepleted) {
     notes.push('Warning: the sell path exhausts the brokerage before death — spending exceeds what this bucket can fund either way.');

@@ -108,6 +108,28 @@ describe('selectStrategy', () => {
     expect(result.choice).not.toBe('both');
   });
 
+  it('keeps BBD feasible when backstop liquid assets can cure the stressed margin call', () => {
+    // Case B at $80k/yr breaches the stressed LTV cap on its own (peaks ~53%)…
+    const noBackstop = selectStrategy({ ...caseB, annualSpending: 80_000 });
+    expect(noBackstop.bbdFeasible).toBeFalse();
+    // …but a Roth backstop large enough to pay the loan down under the cap cures it
+    const withBackstop = selectStrategy({ ...caseB, annualSpending: 80_000, backstopLiquidAssets: 500_000 });
+    expect(withBackstop.bbdFeasible).toBeTrue();
+    expect(withBackstop.choice).toBe('buy-borrow-die');
+    expect(withBackstop.notes.some(n => n.includes('backstop could cure'))).toBeTrue();
+  });
+
+  it('backstop never rescues a breach larger than the backstop itself', () => {
+    const result = selectStrategy({
+      ...caseB,
+      brokerageBalance: 600_000,
+      annualSpending: 90_000,
+      yearsToDeath: 20,
+      backstopLiquidAssets: 200_000, // cure needs far more than this
+    });
+    expect(result.bbdFeasible).toBeFalse();
+  });
+
   it('longer horizons erode the BBD edge (interest compounds against the tax saved)', () => {
     const shortHorizon = selectStrategy({ ...caseB, borrowRate: 0.08, yearsToDeath: 8 });
     const longHorizon = selectStrategy({ ...caseB, borrowRate: 0.08, yearsToDeath: 30 });

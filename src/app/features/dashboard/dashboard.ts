@@ -179,6 +179,8 @@ export class Dashboard {
       expectedReturnRate: scenario.assumedReturnRate,
       yearsToDeath: Math.max(0, scenario.lifeExpectancy - Math.max(scenario.currentAge, scenario.retirementAge)),
       annualSpending: scenario.annualLivingExpenses,
+      // Roth can't be pledged as SBLOC collateral, but it can cure a stressed margin call
+      backstopLiquidAssets: sumAccounts(accounts, ['roth_401k', 'roth_ira']),
     });
   });
 
