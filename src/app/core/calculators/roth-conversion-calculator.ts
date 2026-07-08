@@ -27,7 +27,7 @@ export interface ConversionSimulationInput {
 }
 
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
-const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
+export const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
 
 // Living expenses grow with inflation each year after retirement
 const EXPENSE_INFLATION_RATE = 0.03;
@@ -254,10 +254,10 @@ function latestAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['typ
   return Array.from(latestByType.values());
 }
 
-function sumAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
+export function sumAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
   return latestAccounts(accounts, types).reduce((total, account) => total + account.balance, 0);
 }
 
-function sumCostBasis(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
+export function sumCostBasis(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
   return latestAccounts(accounts, types).reduce((total, account) => total + (account.costBasis ?? account.balance), 0);
 }

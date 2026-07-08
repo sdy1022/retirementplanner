@@ -1,9 +1,11 @@
-import { CurrencyPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
+import { LONG_TERM_CAPITAL_GAINS_RATE, sumAccounts, sumCostBasis } from '../../core/calculators/roth-conversion-calculator';
 import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
+import { effectiveConversionRate, selectStrategy, StrategyChoice } from '../../core/calculators/strategy-selector';
 import { DEFAULT_TAX_YEAR } from '../../core/calculators/tax-tables';
 import { ScenarioResult, YearResult } from '../../core/models/retirement.models';
 import { LocalStateService } from '../../core/services/local-state.service';
@@ -11,7 +13,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CurrencyPipe, MatCardModule, NgxChartsModule],
+  imports: [CurrencyPipe, DecimalPipe, MatCardModule, NgxChartsModule],
   template: `
     <section class="rmd-banner">
       <mat-card>
@@ -52,6 +54,29 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <div class="metric sub"><span>Pre-tax (Traditional) at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.traditionalBalance | currency }}</strong></div>
           <div class="metric sub"><span>Roth at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.rothBalance | currency }}</strong></div>
           <div class="metric sub"><span>Brokerage at {{ finalAge() }}</span><strong>{{ baselineFinalYear()?.brokerageBalance | currency }}</strong></div>
+        </mat-card-content>
+      </mat-card>
+    </section>
+
+    <section class="strategy-selector">
+      <mat-card>
+        <mat-card-header><mat-card-title>Strategy Selector: Roth Conversion vs Buy-Borrow-Die</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p class="verdict">{{ strategyVerdict() }}</p>
+          <div class="metric"><span>Roth conversion value (P × Δrate)</span><strong>{{ strategyDecision().conversionValue | currency }}</strong></div>
+          <div class="metric"><span>Buy-Borrow-Die value (borrow vs sell, at death)</span><strong>{{ strategyDecision().bbdValue | currency }}</strong></div>
+          <div class="metric"><span>BBD stress test (peak LTV after 40% crash, limit 50%)</span><strong>{{ strategyDecision().bbdFeasible ? 'Pass' : 'Fail' }} ({{ strategyDecision().peakStressedLtv * 100 | number: '1.0-0' }}%)</strong></div>
+          <ul class="advice-list">
+            @for (note of strategyDecision().notes; track note) {
+              <li>{{ note }}</li>
+            }
+          </ul>
+          <p class="strategy-note">
+            Rule of thumb: convert pre-tax dollars while today's rate is below the exit rate (residual tax rate, currently
+            {{ (scenario().residualTaxRate ?? residualRateDefault) * 100 | number: '1.0-0' }}%); hold brokerage for step-up only when
+            avoided gains tax outruns loan interest ({{ sblocBorrowRate * 100 | number: '1.0-0' }}% assumed) for your remaining horizon.
+            The two rules apply to different accounts, so "both" is a valid answer.
+          </p>
         </mat-card-content>
       </mat-card>
     </section>
@@ -107,7 +132,8 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .rmd-banner .divider { margin: 0 10px; color: #b0bac4; }
     .rmd-banner .data-year { color: #5a6b7c; font-size: 0.9rem; }
     .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
-    .advice, .action-plan { margin-bottom: 20px; }
+    .strategy-selector, .advice, .action-plan { margin-bottom: 20px; }
+    .verdict { margin: 0 0 12px; font-size: 1.15rem; font-weight: 600; }
     .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
     .advice-list li, .action-list li { margin-bottom: 8px; }
     .action-list li.status-warning { color: #d32f2f; }
@@ -125,6 +151,46 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 export class Dashboard {
   private readonly state = inject(LocalStateService);
   readonly taxDataYear = DEFAULT_TAX_YEAR;
+  readonly scenario = this.state.scenario;
+  readonly residualRateDefault = RESIDUAL_TRADITIONAL_TAX_RATE;
+  // SBLOC borrow rate assumed for the Buy-Borrow-Die comparison; not a scenario input yet
+  readonly sblocBorrowRate = 0.07;
+
+  // Per-bucket decision: Rule 1 compares today's conversion rate against the exit rate on
+  // unconverted dollars; Rule 2 simulates borrow-vs-sell for the brokerage held to step-up.
+  // Spending is funded from the brokerage only once retired, so the horizon starts then.
+  readonly strategyDecision = computed(() => {
+    const scenario = this.state.scenario();
+    const accounts = this.state.accounts();
+    const strategy = scenario.rothConversionStrategy;
+    // t_now = what the plan actually pays per converted dollar (conversions fill cheap
+    // brackets first, so this is usually well below the target bracket); the target
+    // bracket is only the fallback when the plan converts nothing
+    const conversionRate = effectiveConversionRate(this.result().years, scenario.filingStatus, scenario.stateTaxRate)
+      ?? ('targetBracket' in strategy ? strategy.targetBracket : 0.24);
+    return selectStrategy({
+      pretaxBalance: sumAccounts(accounts, ['traditional_401k', 'traditional_ira']),
+      brokerageBalance: sumAccounts(accounts, ['brokerage']),
+      brokerageCostBasis: sumCostBasis(accounts, ['brokerage']),
+      conversionRate,
+      exitRate: scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE,
+      capitalGainsRate: LONG_TERM_CAPITAL_GAINS_RATE,
+      borrowRate: this.sblocBorrowRate,
+      expectedReturnRate: scenario.assumedReturnRate,
+      yearsToDeath: Math.max(0, scenario.lifeExpectancy - Math.max(scenario.currentAge, scenario.retirementAge)),
+      annualSpending: scenario.annualLivingExpenses,
+    });
+  });
+
+  readonly strategyVerdict = computed(() => {
+    const labels: Record<StrategyChoice, string> = {
+      'roth-conversion': '✅ Roth Conversion — convert the pre-tax bucket; borrowing against the brokerage adds risk without enough tax savings.',
+      'buy-borrow-die': '✅ Buy, Borrow, Die — hold the low-basis brokerage for step-up; the pre-tax bucket has no rate spread worth converting.',
+      'both': '✅ Both — convert the pre-tax bucket AND hold the brokerage for step-up; the two strategies act on different accounts.',
+      'neither': 'ℹ️ Neither — no conversion rate spread and no step-up edge; spend and sell directly.',
+    };
+    return labels[this.strategyDecision().choice];
+  });
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
   readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));

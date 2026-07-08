@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Running Steps</title>
+    <title>Help</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
-            max-width: 600px;
+            max-width: 860px;
             margin: 40px auto;
             padding: 20px;
             background-color: #f8f9fa;
@@ -19,12 +19,20 @@
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
         }
         h2 {
             margin-top: 0;
             color: #1a73e8;
         }
-        ol {
+        h3 {
+            color: #1a73e8;
+            border-bottom: 1px solid #e3eaf3;
+            padding-bottom: 6px;
+            margin-top: 28px;
+        }
+        h4 { margin-bottom: 6px; }
+        ol, ul {
             margin-bottom: 0;
             padding-left: 20px;
         }
@@ -33,6 +41,34 @@
         }
         li:last-child {
             margin-bottom: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+            font-size: 0.95rem;
+        }
+        th, td {
+            border: 1px solid #d7dde5;
+            padding: 8px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background: #eef4fb; }
+        pre {
+            background: #f2f5f9;
+            border-radius: 6px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .takeaway {
+            background: #eef4fb;
+            border-left: 4px solid #1a73e8;
+            padding: 10px 14px;
+            border-radius: 4px;
+            margin: 12px 0;
         }
     </style>
 </head>
@@ -43,6 +79,164 @@
             <li>In the <strong>Scenario</strong> page, check and modify the values there.</li>
             <li>Click <strong>"Run Scenario"</strong> and go to the <strong>Dashboard</strong> screen to view your optimized results.</li>
         </ol>
+    </div>
+
+    <div class="container">
+        <h2>BBD vs Roth Conversion — 策略选择框架</h2>
+
+        <h3>一、两种策略的核心定义</h3>
+        <h4>1. 借贷不卖策略（Buy, Borrow, Die）</h4>
+        <p><strong>核心逻辑：</strong>生前绝不卖股票（免掉资本利得税），靠证券抵押贷款借钱过日子；死后把"资产+贷款债务"一并传给子女，利用政策（Step-up in Basis）抹去所有增值税。</p>
+        <p><strong>本质：</strong>用高风险（借贷利息、股市暴跌爆仓风险）换取资产总额的名义最大化。</p>
+        <p><strong>适用人群：</strong>极少数超级富豪。必须拥有极庞大的证券账户（Brokerage），且股票成本几乎为零。</p>
+        <h4>2. Roth 转换策略（Roth Conversion）</h4>
+        <p><strong>核心逻辑：</strong>生前主动把税前钱（Pre-tax）转换成 Roth，在当下把税交清。换取资产未来几十年彻底免税增值。</p>
+        <p><strong>本质：</strong>用确定性（主动锁定当下已知税率）换取长期的稳健，消除未来政策和死后税收炸弹。</p>
+        <p><strong>适用人群：</strong>绝大多数普通及中产家庭。尤其是想保护配偶免受"单身税率惩罚"，或不想给子女留下"10年内必须取光交税（SECURE Act）"负担的人。</p>
+        <div class="takeaway">第一种是富人的"险棋"，用杠杆风险博最大资产；第二种是普通人的"稳棋"，用当下可控的税换取子孙后代彻底免税、毫无后顾之忧。</div>
+
+        <h3>二、策略选择的核心判断标准：看你的钱在哪个桶里</h3>
+        <ul>
+            <li><strong>Pre-tax（401k/IRA）&gt;&gt; Brokerage</strong> → 选 Roth Conversion（稳棋）</li>
+            <li><strong>Brokerage &gt;&gt; Pre-tax</strong> → 选 Buy, Borrow, Die（险棋）
+                <ul>
+                    <li>前提：Brokerage 的成本基础（Cost Basis）极低</li>
+                    <li>前提：Brokerage 规模足够大，SBLOC 抵押率安全</li>
+                </ul>
+            </li>
+            <li><strong>两个桶差不多大</strong> → 选 Roth Conversion 为主（更稳、更可控）</li>
+        </ul>
+
+        <h3>三、两个具体案例对比</h3>
+        <h4>案例 A：Pre-tax 为主（适合 Roth Conversion）</h4>
+        <table>
+            <tr><th>Pre-tax (401k/IRA)</th><td>$2,000,000（67%）</td></tr>
+            <tr><th>Roth</th><td>$500,000</td></tr>
+            <tr><th>Brokerage</th><td>$500,000（成本 $250,000）</td></tr>
+            <tr><th>总资产</th><td>$3,000,000</td></tr>
+        </table>
+        <p><strong>为什么选 Roth Conversion：</strong></p>
+        <ul>
+            <li>$2M 在 Pre-tax = 定时炸弹</li>
+            <li>75 岁 RMD 强制提取 ~$80-100k/年 → 推入 32%+ 税级</li>
+            <li>配偶去世 → 单身报税人 → 同样的 RMD，更高的税级</li>
+            <li>子女继承 → SECURE Act 10年规则 → 子女被迫每年取 $200k+，在他们收入最高的年龄段交重税</li>
+            <li>Roth Conversion 一次性解决以上所有问题</li>
+        </ul>
+        <p><strong>为什么 BBD 不适合：</strong></p>
+        <ul>
+            <li>Brokerage 只有 $0.5M — 太小，无法安全做 SBLOC</li>
+            <li>$2M Pre-tax 不能作为 SBLOC 抵押品（法律禁止）</li>
+            <li>即使借钱，$2M Pre-tax 定时炸弹依然存在 — BBD 解决不了</li>
+            <li>未实现增值仅 $250k — Step-up in Basis 节税效果有限</li>
+        </ul>
+        <h4>案例 B：Brokerage 为主（适合 Buy, Borrow, Die）</h4>
+        <table>
+            <tr><th>Pre-tax (401k/IRA)</th><td>$500,000（17%）</td></tr>
+            <tr><th>Roth</th><td>$500,000</td></tr>
+            <tr><th>Brokerage</th><td>$2,000,000（成本 $500,000）</td></tr>
+            <tr><th>总资产</th><td>$3,000,000</td></tr>
+        </table>
+        <p><strong>为什么选 Buy, Borrow, Die：</strong></p>
+        <ul>
+            <li>$2M Brokerage 中有 $1.5M 未实现增值</li>
+            <li>如果直接卖出：$1.5M × 23.8%（LTCG + NIIT）= ~$357k 资本利得税</li>
+            <li>BBD 策略：用 SBLOC 借 $600-800k（30-40% 抵押率）过日子</li>
+            <li>$2M 保持投资、持续增值</li>
+            <li>死后 Step-up in Basis 抹掉全部 $1.5M+ 增值 → $0 资本利得税</li>
+            <li>继承人以市价继承，免税卖出，还清 SBLOC</li>
+            <li>净节税：$357k+</li>
+        </ul>
+        <p><strong>为什么 Roth Conversion 不太需要：</strong></p>
+        <ul>
+            <li>Pre-tax 仅 $0.5M — RMD 很小，税负可控</li>
+            <li>转换 $0.5M 需交 $110k 税，仅比直接交 RMD 税省 $50-80k</li>
+            <li>而且卖 Brokerage 付转换税会触发额外资本利得税</li>
+        </ul>
+
+        <h3>四、决策矩阵</h3>
+        <table>
+            <tr><th>判断维度</th><th>Roth Conversion</th><th>Buy, Borrow, Die</th></tr>
+            <tr><td>钱在哪里？</td><td>Pre-tax 为主</td><td>Brokerage 为主</td></tr>
+            <tr><td>未实现增值</td><td>小（无所谓）</td><td>巨大（驱动策略）</td></tr>
+            <tr><td>成本基础</td><td>不重要</td><td>极低 = Step-up 节税巨大</td></tr>
+            <tr><td>SBLOC 抵押品</td><td>Brokerage 小 = 不够</td><td>Brokerage 大 = 充足</td></tr>
+            <tr><td>RMD 风险</td><td>高（大量 Pre-tax）</td><td>低（少量 Pre-tax）</td></tr>
+            <tr><td>SECURE Act 继承风险</td><td>高（子女继承 Pre-tax 炸弹）</td><td>低（子女继承 stepped-up 资产）</td></tr>
+            <tr><td>所需风险承受力</td><td>低（税已知、确定）</td><td>高（杠杆、市场风险、margin call）</td></tr>
+            <tr><td>适合人群</td><td>中产及以上</td><td>超高净值</td></tr>
+        </table>
+
+        <h3>五、第三种情况：混合型（两个桶都很大）</h3>
+        <p>场景：Pre-tax $2M + Brokerage $2M（成本 $0.5M）</p>
+        <p><strong>最优策略：两手抓</strong></p>
+        <ol>
+            <li>Roth Conversion 清理 Pre-tax（消除 RMD 炸弹）</li>
+            <li>Brokerage 保持不动，留给 BBD / Step-up in Basis</li>
+            <li>转换税从收入或现金支付，不动 Brokerage（保护 BBD 抵押品）</li>
+        </ol>
+        <p>注意：这需要足够的现金流来支付转换税，而不碰任何一个桶。这是超级富豪的版本 — 但前提是有独立的收入来源或现金储备。</p>
+
+        <h3>六、最终结论</h3>
+        <ul>
+            <li>钱主要在 Pre-tax 桶里 → Roth Conversion（把定时炸弹提前拆掉）</li>
+            <li>钱主要在 Brokerage 桶里且成本极低 → Buy, Borrow, Die（让 Step-up 在死后抹掉所有增值税）</li>
+            <li>两个桶差不多大 → Roth Conversion 为主（因为它更稳、更可控、不依赖市场和利率）</li>
+        </ul>
+        <div class="takeaway">同样的 $3M 总资产，仅仅因为分布在不同的桶里，最优策略就完全不同。策略选择的本质不是"哪个更好"，而是"你的钱在哪里"。</div>
+
+        <h3>七、修正与补充（重要）</h3>
+        <h4>1. 两种策略不是二选一 — 它们作用于不同的桶</h4>
+        <ul>
+            <li>IRA/401k 死后没有 Step-up（属于 IRD，继承人照常全额交税），所以 Pre-tax 永远不能 BBD</li>
+            <li>Brokerage 不能做 Roth Conversion</li>
+            <li>真正的决策是"每个桶各自怎么处理"，而不是"整个人选哪条路"</li>
+            <li>即使是案例 B，那 $0.5M Pre-tax 也应该在低收入年份按 10-12% 税级逐年转换（小桶转换便宜，正因为桶小；"转换要交 $110k 税"是按 22% 一次性转算的，高估了）</li>
+        </ul>
+        <h4>2. 案例 B 的 "$357k 节税" 是跟稻草人比出来的</h4>
+        <ul>
+            <li>它假设一年内全部卖出、按最高 23.8% 交税</li>
+            <li>真实的替代方案是"退休后低收入年份逐年卖出"：MFJ 应税收入 ~$97k 以下 LTCG 税率是 0%，NIIT 只在 MAGI &gt; $250k 才触发。逐年收割增值可能一生只交 $100-200k，甚至更少</li>
+            <li>BBD 相对"聪明地慢慢卖"的真实优势薄得多，还要背几十年复利贷款 + margin call 风险 + Step-up 法律在几十年内不变的政策风险</li>
+        </ul>
+        <h4>3. 只看余额不够，判定规则还需要三个变量</h4>
+        <ul>
+            <li>未实现增值比例 g（成本基础越低，Step-up 越值钱）</li>
+            <li>年支出 ÷ Brokerage（借钱过日子的钱相对抵押品越小，LTV 越安全）</li>
+            <li>距离身故的年限 T（BBD 是"赌利息复利赶不上省下的税"，T 越长赌注越大 — 数学上 BBD 是老年人的策略：85 岁做可行，60 岁做危险）</li>
+        </ul>
+
+        <h3>八、数学判定规则（每桶一条不等式）</h3>
+        <h4>规则 1 — Pre-tax 桶：今年转换一块钱，当且仅当</h4>
+        <pre>t_now &lt; t_exit
+
+t_now  = 今年转换这块钱的边际税率（会填到哪个税级）
+t_exit = 不转换时这块钱将来"出去"的税率
+       = max(RMD 年代的边际税率, 遗属单身报税税率, 继承人 10 年规则窗口内的税率)</pre>
+        <p>逐块钱判断 → 答案永远是"转到 t_now 追上 t_exit 的那一格为止"，而不是全转或不转。（用应税账户的钱付转换税还有额外加成：把有税收拖累的钱挪进免税壳，约值 1-3 个百分点）</p>
+        <h4>规则 2 — Brokerage 桶：持有到死（BBD）而不是卖，当且仅当</h4>
+        <pre>c × g  &gt;  (r − m) × T + 风险溢价
+
+c = 逐年聪明卖出时实际能做到的 LTCG 税率（0/15%，不是 23.8%）
+g = 增值占比（1 − 成本/市值）
+r = SBLOC 借款利率，m = 预期市场收益率，T = 距身故年数
+
+另加硬性可行性约束（压力测试）：
+借款余额(含复利) ≤ λ × (1 − d) × Brokerage 市值    （如 λ=50% 抵押率上限，d=40% 崩盘）
+若任何一年突破，BBD 不可行，数值上多划算都没用</pre>
+        <h4>家庭层面的粗略比较（"看桶"启发式的来源）</h4>
+        <pre>转换价值 ≈ P × (t_exit − t_now)          P = Pre-tax 余额
+BBD 价值  ≈ B × g × c − 利差成本          B = Brokerage 余额</pre>
+        <p>余额只是乘积中的一个因子：$2M 高成本基础的 Brokerage（g≈0.1）照样不该 BBD；永远在 37% 税级的人的 $2M Pre-tax（Δt≈0）照样不该转换。</p>
+        <h4>决策输出</h4>
+        <table>
+            <tr><th>条件</th><th>结论</th></tr>
+            <tr><td>转换价值 &gt; 0 且 BBD 价值 &gt; 0 且 LTV 可行</td><td>两手抓（both）</td></tr>
+            <tr><td>只有转换价值 &gt; 0</td><td>Roth Conversion</td></tr>
+            <tr><td>只有 BBD 价值 &gt; 0 且可行</td><td>Buy, Borrow, Die</td></tr>
+            <tr><td>都不成立</td><td>都不做（直接花、直接卖）</td></tr>
+        </table>
+        <p>此规则已在 Dashboard 的 <strong>Strategy Selector</strong> 卡片中实现（代码：<code>src/app/core/calculators/strategy-selector.ts</code>），会根据你的账户和 Scenario 参数实时给出裁决和解释。</p>
     </div>
 </body>
 </html>
