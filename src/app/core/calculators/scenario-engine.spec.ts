@@ -32,6 +32,43 @@ describe('scenario-engine', () => {
     expect(result.years[0].taxFromBrokerage).toBe(0);
   });
 
+  it('pays taxes from a grossed-up traditional withdrawal before touching Roth', () => {
+    const scenario: Scenario = {
+      name: 'Traditional funds taxes',
+      currentAge: 60,
+      retirementAge: 60,
+      birthYear: 1966,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 60,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 100000,
+    };
+
+    const result = runScenario(scenario, [
+      { type: 'traditional_401k', balance: 1000000, snapshotDate: '2026-01-01' },
+      { type: 'roth_ira', balance: 500000, snapshotDate: '2026-01-01' },
+    ]);
+
+    const year = result.years[0];
+    // $100k of expenses comes from traditional (no brokerage, no SS yet); with no
+    // brokerage and no conversion to withhold from, the tax on that income is paid
+    // by an extra traditional withdrawal grossed up for its own tax — not by Roth.
+    expect(year.expensesFromTraditional).toBe(100000);
+    expect(year.taxFromRoth).toBe(0);
+    expect(year.rothBalance).toBe(500000);
+    // The gross-up makes the withdrawal exceed the base tax on $100k ($13,170) and,
+    // since it fully funds the year's tax bill, it equals the final total tax.
+    expect(year.taxFromTraditional).toBeGreaterThan(13170);
+    expect(year.taxFromTraditional).toBe(year.totalTax);
+    expect(year.traditionalBalance).toBe(900000 - year.taxFromTraditional);
+    expect(year.shortfall).toBe(0);
+  });
+
   it('smooth-income-target keeps total income flat across the SS claim and RMD years within the bracket', () => {
     const scenario: Scenario = {
       name: 'Income ceiling',

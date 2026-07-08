@@ -115,6 +115,9 @@ export interface YearResult {
   // Funding sources for the year's taxes and IRMAA
   taxFromBrokerage: number;
   taxWithheldFromConversion: number;
+  // Grossed-up traditional withdrawal that pays taxes once brokerage and conversion
+  // withholding are exhausted — drains pre-tax dollars before Roth is touched
+  taxFromTraditional: number;
   taxFromRoth: number;
   // SBLOC (Buy-Borrow-Die) tax funding; absent/0 when the scenario doesn't use it.
   // endingAssets stays gross — subtract sblocLoanBalance for the net estate.

@@ -114,8 +114,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Exact Social Security taxability via the provisional-income formula, now that all
     // non-SS ordinary income is known (below the 85% sizing estimate in low-income years)
     const nonSsOrdinaryIncome = currentWage + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
-    const taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, input.filingStatus));
-    const taxableIncome = roundCurrency(nonSsOrdinaryIncome + taxableSsIncome);
+    let taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, input.filingStatus));
+    let taxableIncome = roundCurrency(nonSsOrdinaryIncome + taxableSsIncome);
     // State (e.g. Indiana): flat rate on ordinary income, Social Security exempt,
     // no federal-style standard deduction
     const stateTaxableIncome = Math.max(0, nonSsOrdinaryIncome);
@@ -130,20 +130,20 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const dividendStateTax = roundCurrency(dividends * input.stateTaxRate);
     // Working years: wages cover their own taxes, so the plan is charged only the
     // incremental tax the conversion adds on top of wage income.
-    const federalTax = isRetired
+    let federalTax = isRetired
       ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax + dividendFederalTax)
       : roundCurrency((conversion > 0
           ? calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(taxableIncome - conversion, input.filingStatus, taxYear, inflationFactor)
           : 0) + dividendFederalTax);
-    const stateTax = isRetired
+    let stateTax = isRetired
       ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
       : roundCurrency((conversion > 0 ? conversion * input.stateTaxRate : 0) + dividendStateTax);
-    const totalTax = roundCurrency(federalTax + stateTax);
-    const marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
+    let totalTax = roundCurrency(federalTax + stateTax);
+    let marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
 
     // IRMAA: Medicare surcharge from 65 on, cliff-based on MAGI from two years prior.
     // MAGI proxy = gross ordinary income + realized capital gains + dividends.
-    const magi = roundCurrency(taxableIncome + realizedGain + dividends);
+    let magi = roundCurrency(taxableIncome + realizedGain + dividends);
     magiByAge.set(age, magi);
     const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? magi;
     const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus) : 0;
@@ -195,7 +195,44 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Tax payments draw down basis first (untaxed); keep basis within the remaining balance
     brokerageBasis = Math.min(brokerageBasis, brokerageBalance);
 
-    // Taxes still unpaid after brokerage and conversion withholding come from Roth
+    // Taxes still unpaid after brokerage and conversion withholding are funded from the
+    // remaining traditional balance before Roth is touched — draining pre-tax dollars at
+    // today's marginal rate beats spending tax-free Roth to preserve them. The withdrawal
+    // is itself ordinary income, so it is grossed up for the extra tax it creates (solved
+    // by fixed-point iteration), even when that spills into a higher bracket.
+    let taxFromTraditional = 0;
+    if (unpaidOutflow > 0 && traditionalBalance > 0) {
+      const baseFederalTax = calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor);
+      const grossUpTax = (extra: number): number => {
+        const ssTaxable = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + extra, input.filingStatus));
+        const fedDelta = calculateTax(roundCurrency(nonSsOrdinaryIncome + extra + ssTaxable), input.filingStatus, taxYear, inflationFactor) - baseFederalTax;
+        return roundCurrency(fedDelta + extra * input.stateTaxRate);
+      };
+      let withdrawal = Math.min(traditionalBalance, unpaidOutflow);
+      for (let i = 0; i < 30; i++) {
+        const next = Math.min(traditionalBalance, roundCurrency(unpaidOutflow + grossUpTax(withdrawal)));
+        if (Math.abs(next - withdrawal) < 0.01) {
+          withdrawal = next;
+          break;
+        }
+        withdrawal = next;
+      }
+      const extraTax = grossUpTax(withdrawal);
+      taxFromTraditional = withdrawal;
+      traditionalBalance = roundCurrency(traditionalBalance - withdrawal);
+      unpaidOutflow = roundCurrency(Math.max(0, unpaidOutflow + extraTax - withdrawal));
+      // Fold the gross-up income into the year's reported income, tax, and MAGI figures
+      taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + withdrawal, input.filingStatus));
+      taxableIncome = roundCurrency(nonSsOrdinaryIncome + withdrawal + taxableSsIncome);
+      stateTax = roundCurrency(stateTax + withdrawal * input.stateTaxRate);
+      federalTax = roundCurrency(federalTax + extraTax - withdrawal * input.stateTaxRate);
+      totalTax = roundCurrency(federalTax + stateTax);
+      marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
+      magi = roundCurrency(taxableIncome + realizedGain + dividends);
+      magiByAge.set(age, magi);
+    }
+
+    // Taxes still unpaid after brokerage, withholding, and traditional come from Roth
     // (a tax-free withdrawal), so a wealthy plan is not flagged as underfunded
     const rothForTax = Math.min(rothBalance, unpaidOutflow);
     rothBalance = roundCurrency(rothBalance - rothForTax);
@@ -260,6 +297,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       expensesFromRoth: roundCurrency(fromRoth),
       taxFromBrokerage: roundCurrency(taxFromBrokerage),
       taxWithheldFromConversion: roundCurrency(Math.max(0, conversion - actualRothDeposit)),
+      taxFromTraditional: roundCurrency(taxFromTraditional),
       taxFromRoth: roundCurrency(rothForTax),
       taxFromSbloc: sblocDraw,
       sblocInterest,

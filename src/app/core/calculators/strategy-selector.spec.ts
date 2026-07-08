@@ -8,7 +8,7 @@ function yearWith(overrides: Partial<YearResult>): YearResult {
     irmaa: 0, shortfall: 0, marginalRate: 0, livingExpenses: 0, endingAssets: 0,
     expensesFromSs: 0, expensesFromRmd: 0, expensesFromTraditional: 0,
     expensesFromBrokerage: 0, expensesFromRoth: 0,
-    taxFromBrokerage: 0, taxWithheldFromConversion: 0, taxFromRoth: 0,
+    taxFromBrokerage: 0, taxWithheldFromConversion: 0, taxFromTraditional: 0, taxFromRoth: 0,
     ...overrides,
   };
 }
