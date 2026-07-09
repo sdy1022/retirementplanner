@@ -38,6 +38,14 @@ describe('monte-carlo', () => {
     expect(p.p25).toBeLessThanOrEqual(p.p50);
     expect(p.p50).toBeLessThanOrEqual(p.p75);
     expect(p.p75).toBeLessThanOrEqual(p.p90);
+    // Fan-chart data: one row per simulated age (60..90), each with ordered bands
+    expect(result.assetsByAge.length).toBe(31);
+    expect(result.assetsByAge[0].age).toBe(60);
+    expect(result.assetsByAge.at(-1)!.age).toBe(90);
+    for (const row of result.assetsByAge) {
+      expect(row.p10).toBeLessThanOrEqual(row.p50);
+      expect(row.p50).toBeLessThanOrEqual(row.p90);
+    }
   });
 
   it('is deterministic for a fixed seed', () => {
