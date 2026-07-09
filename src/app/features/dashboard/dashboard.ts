@@ -1,8 +1,11 @@
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
+import { DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTarget } from '../../core/calculators/monte-carlo';
 import { LONG_TERM_CAPITAL_GAINS_RATE, sumAccounts, sumCostBasis } from '../../core/calculators/roth-conversion-calculator';
 import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
 import { effectiveConversionRate, selectStrategy, StrategyChoice } from '../../core/calculators/strategy-selector';
@@ -13,7 +16,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CurrencyPipe, DecimalPipe, MatCardModule, NgxChartsModule],
+  imports: [CurrencyPipe, DecimalPipe, MatButtonModule, MatCardModule, MatProgressSpinnerModule, NgxChartsModule],
   template: `
     <section class="rmd-banner">
       <mat-card>
@@ -80,6 +83,39 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
         </mat-card-content>
       </mat-card>
     </section>
+
+    @if (isSmoothIncomeTarget()) {
+    <section class="monte-carlo">
+      <mat-card>
+        <mat-card-header><mat-card-title>Monte Carlo Verification (Smooth Income Target)</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p class="strategy-note">
+            Replays the solved conversion plan under {{ monteCarloTrials | number }} randomized market-return sequences
+            (mean-adjusted historical bootstrap, centered on your assumed {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% return)
+            instead of one flat rate — showing how the plan holds up across a realistic range of real-world outcomes.
+          </p>
+          <button mat-flat-button color="primary" [disabled]="monteCarloRunning()" (click)="runMonteCarlo()">
+            {{ monteCarloRunning() ? 'Running…' : (monteCarloResult() ? 'Re-run Monte Carlo' : 'Run Monte Carlo (' + (monteCarloTrials | number) + ' trials)') }}
+          </button>
+          @if (monteCarloRunning()) {
+            <div class="mc-loading"><mat-spinner diameter="24" /> <span>Simulating {{ monteCarloTrials | number }} market paths…</span></div>
+          }
+          @if (monteCarloError()) {
+            <p class="strategy-note mc-error">⚠️ {{ monteCarloError() }}</p>
+          }
+          @if (monteCarloResult(); as mc) {
+            <div class="metric"><span>Probability the plan never runs short through age {{ finalAge() }}</span><strong>{{ mc.successProbability * 100 | number: '1.1-1' }}%</strong></div>
+            <div class="metric sub"><span>Mean after-tax ending assets</span><strong>{{ mc.meanEndingAssets | currency }}</strong></div>
+            <div class="metric sub"><span>10th percentile (bad markets)</span><strong>{{ mc.endingAssetsPercentiles.p10 | currency }}</strong></div>
+            <div class="metric sub"><span>25th percentile</span><strong>{{ mc.endingAssetsPercentiles.p25 | currency }}</strong></div>
+            <div class="metric sub"><span>Median (50th percentile)</span><strong>{{ mc.endingAssetsPercentiles.p50 | currency }}</strong></div>
+            <div class="metric sub"><span>75th percentile</span><strong>{{ mc.endingAssetsPercentiles.p75 | currency }}</strong></div>
+            <div class="metric sub"><span>90th percentile (good markets)</span><strong>{{ mc.endingAssetsPercentiles.p90 | currency }}</strong></div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </section>
+    }
 
     <section class="summary">
       <mat-card>
@@ -158,7 +194,9 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .rmd-banner .divider { margin: 0 10px; color: #b0bac4; }
     .rmd-banner .data-year { color: #5a6b7c; font-size: 0.9rem; }
     .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
-    .strategy-selector, .advice, .action-plan { margin-bottom: 20px; }
+    .strategy-selector, .advice, .action-plan, .monte-carlo { margin-bottom: 20px; }
+    .mc-loading { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: #5a6b7c; font-size: 0.92rem; }
+    .mc-error { background: #fdecea; color: #b71c1c; }
     .verdict { margin: 0 0 12px; font-size: 1.15rem; font-weight: 600; }
     .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
     .advice-list li, .action-list li { margin-bottom: 8px; }
@@ -225,6 +263,31 @@ export class Dashboard {
     return labels[this.strategyDecision().choice];
   });
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
+  readonly monteCarloTrials = DEFAULT_MONTE_CARLO_TRIALS;
+  readonly monteCarloResult = signal<MonteCarloResult | null>(null);
+  readonly monteCarloRunning = signal(false);
+  readonly monteCarloError = signal<string | null>(null);
+  readonly isSmoothIncomeTarget = computed(() => this.state.scenario().rothConversionStrategy.mode === 'smooth-income-target');
+
+  // 20k trials of the full year-by-year simulation take a couple of seconds, so this runs on
+  // click (not as a computed signal recomputing on every scenario edit) and defers the heavy
+  // loop a tick so the "Running…" state paints before the main thread blocks.
+  runMonteCarlo(): void {
+    this.monteCarloRunning.set(true);
+    this.monteCarloError.set(null);
+    const scenario = this.state.scenario();
+    const accounts = this.state.accounts();
+    setTimeout(() => {
+      try {
+        const result = runMonteCarloSmoothIncomeTarget(scenario, accounts, this.monteCarloTrials);
+        this.monteCarloResult.set(result);
+      } catch (err) {
+        this.monteCarloError.set(err instanceof Error ? err.message : 'Monte Carlo simulation failed.');
+      } finally {
+        this.monteCarloRunning.set(false);
+      }
+    }, 0);
+  }
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
   // Same scenario, but conversion taxes in the window are borrowed via SBLOC instead of
   // selling brokerage (Buy-Borrow-Die applied to the tax bill)

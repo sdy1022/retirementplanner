@@ -12,6 +12,10 @@ export interface ConversionSimulationInput {
   birthYear: number;
   filingStatus: FilingStatus;
   assumedReturnRate: number;
+  // Optional per-year override for Monte Carlo runs: returns the growth rate to apply for a
+  // given simulated age/year-index instead of the flat assumedReturnRate. When absent, every
+  // year grows at assumedReturnRate (the existing deterministic behavior).
+  returnRateForYear?: (age: number, yearIndex: number) => number;
   stateTaxRate: number;
   annualLivingExpenses?: number;
   annualOtherIncome?: number;
@@ -267,9 +271,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const unfundedExpenses = Math.max(0, spendingNeed - fromBrokerage - fromTraditional - fromRoth);
     const shortfall = roundCurrency(unpaidOutflow + unfundedExpenses);
 
-    traditionalBalance = roundCurrency(traditionalBalance * (1 + input.assumedReturnRate));
-    rothBalance = roundCurrency(rothBalance * (1 + input.assumedReturnRate));
-    brokerageBalance = roundCurrency(brokerageBalance * (1 + input.assumedReturnRate));
+    const growthRate = input.returnRateForYear ? input.returnRateForYear(age, age - startAge) : input.assumedReturnRate;
+    traditionalBalance = roundCurrency(traditionalBalance * (1 + growthRate));
+    rothBalance = roundCurrency(rothBalance * (1 + growthRate));
+    brokerageBalance = roundCurrency(brokerageBalance * (1 + growthRate));
     // Reinvested dividends were taxed this year, so they add to basis (never taxed again)
     brokerageBasis = Math.min(roundCurrency(brokerageBasis + dividends), brokerageBalance);
 

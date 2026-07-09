@@ -54,7 +54,12 @@ export function runScenario(scenario: Scenario, accounts: AccountSnapshot[]): Sc
     notes.push(`Living expenses are paid from brokerage first, freeing bracket room for conversions: ${fmt(best.value)} after tax vs ${fmt(bestTraditionalFirst)} with IRA-first spending.`);
   }
 
-  return notes.length > 0 ? { ...best.result, note: notes.join(' ') } : best.result;
+  return {
+    ...best.result,
+    ...(notes.length > 0 ? { note: notes.join(' ') } : {}),
+    resolvedSpendingOrder: best.spendingOrder,
+    resolvedAllowPreRetirementConversions: best.allowPreRetirementConversions,
+  };
 }
 
 function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): ScenarioResult {
@@ -94,26 +99,31 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
   if (scenario.rothConversionStrategy.mode === 'auto-optimize') {
     const table = getTaxTable(DEFAULT_TAX_YEAR, scenario.filingStatus);
     let bestResult: ReturnType<typeof runWithStrategy> | null = null;
+    let bestStrategy: RothConversionStrategy | null = null;
     // Candidates are compared by after-tax ending assets (same yardstick as the smooth
     // modes) so leftover traditional dollars don't count at face value
     let bestScore = -Infinity;
 
     for (const bracket of table.brackets) {
-      const result = runWithStrategy({ mode: 'fill-to-bracket', targetBracket: bracket.rate });
+      const candidate: RothConversionStrategy = { mode: 'fill-to-bracket', targetBracket: bracket.rate };
+      const result = runWithStrategy(candidate);
       const score = afterTaxScore(result);
       if (score > bestScore) {
         bestScore = score;
         bestResult = result;
+        bestStrategy = candidate;
       }
     }
 
     // Also scan fixed flat amounts from $50k to $500k in $10k increments to see if a smooth strategy beats filling a bracket
     for (let amt = 50000; amt <= 500000; amt += 10000) {
-      const result = runWithStrategy({ mode: 'fixed-amount', amount: amt });
+      const candidate: RothConversionStrategy = { mode: 'fixed-amount', amount: amt };
+      const result = runWithStrategy(candidate);
       const score = afterTaxScore(result);
       if (score > bestScore) {
         bestScore = score;
         bestResult = result;
+        bestStrategy = candidate;
       }
     }
 
@@ -123,6 +133,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       years,
       totalTax: years.reduce((total, year) => total + year.totalTax, 0),
       endingAssets: years.at(-1)?.endingAssets ?? 0,
+      resolvedStrategy: bestStrategy!,
     };
   }
 
@@ -146,27 +157,30 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
         bestAmount = amt;
         bestYears = years;
       } else {
-        // As we decrease the amount, the traditional balance gets larger. 
+        // As we decrease the amount, the traditional balance gets larger.
         // If this amount fails, lower amounts will also fail (because traditional balance will be even higher).
         // So the last successful amount was the optimal (lowest) one!
         break;
       }
     }
 
-    let finalYears = bestYears || runWithStrategy({ mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: true });
+    let finalStrategy: RothConversionStrategy = { mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: true };
+    let finalYears = bestYears || runWithStrategy(finalStrategy);
 
     // The solved flat amount stops at RMD age; also score continuing it into the RMD years
     // (all of them, or just the first 5/10) and keep whichever after-tax result is best
     // while still respecting the target bracket in every RMD year.
     let bestScore = afterTaxScore(finalYears);
     for (const conversionStopAge of [rmdStartAge + 5, rmdStartAge + 10, undefined]) {
-      const years = runWithStrategy({ mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: false, conversionStopAge });
+      const candidate: RothConversionStrategy = { mode: 'fixed-amount', amount: bestAmount, stopAtRmdAge: false, conversionStopAge };
+      const years = runWithStrategy(candidate);
       const rmdYears = years.filter(y => y.age >= rmdStartAge);
       if (rmdYears.some(y => y.marginalRate > targetBracket)) continue;
       const score = afterTaxScore(years);
       if (score > bestScore) {
         bestScore = score;
         finalYears = years;
+        finalStrategy = candidate;
       }
     }
 
@@ -175,6 +189,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       years: finalYears,
       totalTax: finalYears.reduce((total, year) => total + year.totalTax, 0),
       endingAssets: finalYears.at(-1)?.endingAssets ?? 0,
+      resolvedStrategy: finalStrategy,
     };
   }
 
@@ -192,6 +207,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
     // is discounted by an assumed liquidation rate so pre-tax dollars don't count as full value.
     const candidateBrackets = table.brackets.filter(b => b.rate >= targetBracket && Number.isFinite(b.max));
     let bestYears: YearResult[] | null = null;
+    let bestStrategy: RothConversionStrategy | null = null;
 
     const irmaaThresholds = IRMAA_TIERS[scenario.filingStatus].map(t => t.magiThreshold);
 
@@ -215,11 +231,13 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       ];
       let bestScore = -Infinity;
       let bracketBest: YearResult[] | null = null;
+      let bracketBestStrategy: RothConversionStrategy | null = null;
 
       for (const targetIncome of ceilings) {
         for (let floor = 0; floor <= 2500000; floor += 50000) {
           for (const behavior of rmdBehaviors) {
-            const years = runWithStrategy({ mode: 'fill-to-income', targetIncome, preserveFloor: floor, ...behavior });
+            const candidate: RothConversionStrategy = { mode: 'fill-to-income', targetIncome, preserveFloor: floor, ...behavior };
+            const years = runWithStrategy(candidate);
 
             const rmdYears = years.filter(y => y.age >= rmdStartAge);
             const maxRate = rmdYears.reduce((max, y) => Math.max(max, y.marginalRate), 0);
@@ -229,6 +247,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
             if (score > bestScore) {
               bestScore = score;
               bracketBest = years;
+              bracketBestStrategy = candidate;
             }
           }
         }
@@ -236,10 +255,13 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
 
       if (bracketBest) {
         bestYears = bracketBest;
+        bestStrategy = bracketBestStrategy;
         break;
       }
       // No ceiling/floor keeps RMD years within this bracket; remember the floor-0 run and escalate
-      bestYears = runWithStrategy({ mode: 'fill-to-income', targetIncome: bracketCeiling, stopAtRmdAge: true });
+      const fallback: RothConversionStrategy = { mode: 'fill-to-income', targetIncome: bracketCeiling, stopAtRmdAge: true };
+      bestYears = runWithStrategy(fallback);
+      bestStrategy = fallback;
     }
 
     const finalYears = bestYears!;
@@ -248,6 +270,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       years: finalYears,
       totalTax: finalYears.reduce((total, year) => total + year.totalTax, 0),
       endingAssets: finalYears.at(-1)?.endingAssets ?? 0,
+      resolvedStrategy: bestStrategy!,
     };
   }
 
@@ -258,5 +281,6 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
     years,
     totalTax: years.reduce((total, year) => total + year.totalTax, 0),
     endingAssets: years.at(-1)?.endingAssets ?? 0,
+    resolvedStrategy: scenario.rothConversionStrategy,
   };
 }
