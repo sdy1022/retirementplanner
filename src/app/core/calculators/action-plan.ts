@@ -19,6 +19,7 @@ function fundingBreakdown(year: YearResult): string {
     year.expensesFromRoth > 0 ? `Roth ${money(year.expensesFromRoth)}` : '',
   ].filter(Boolean);
   const taxParts = [
+    (year.taxFromSbloc ?? 0) > 0 ? `SBLOC loan ${money(year.taxFromSbloc!)}` : '',
     year.taxFromBrokerage > 0 ? `brokerage ${money(year.taxFromBrokerage)}` : '',
     year.taxWithheldFromConversion > 0 ? `withheld from conversion ${money(year.taxWithheldFromConversion)}` : '',
     year.taxFromTraditional > 0 ? `Traditional ${money(year.taxFromTraditional)}` : '',

@@ -123,7 +123,12 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     @if (actionPlan().length > 0) {
     <section class="action-plan">
       <mat-card>
-        <mat-card-header><mat-card-title>Year-by-Year Action Plan</mat-card-title></mat-card-header>
+        <mat-card-header>
+          <mat-card-title>Year-by-Year Action Plan</mat-card-title>
+          <mat-card-subtitle>
+            Based on the winning strategy: {{ sblocWins() ? 'SBLOC-funded conversion taxes (Buy-Borrow-Die)' : 'conversion taxes paid in cash' }}
+          </mat-card-subtitle>
+        </mat-card-header>
         <mat-card-content>
           <ul class="action-list">
             @for (step of actionPlan(); track step.age) {
@@ -257,22 +262,35 @@ export class Dashboard {
       ? `✅ Borrowing the conversion tax wins: the untouched brokerage outgrows the ${Math.round(this.sblocBorrowRate * 100)}% loan, leaving ${fmt.format(edge)} more after tax at ${this.finalAge()}.`
       : `❌ Paying the tax in cash wins: ${Math.round(this.sblocBorrowRate * 100)}% compounding loan interest costs ${fmt.format(-edge)} more than the gains tax and growth it avoids.`) + cureNote;
   });
-  readonly rmdChart = computed(() => this.toSeries('RMD', this.result(), this.baseline(), 'rmd'));
+  // Charts plot the same winning run the action plan narrates (planResult), against the
+  // no-conversion baseline
+  readonly rmdChart = computed(() => this.toSeries('RMD', this.planResult(), this.baseline(), 'rmd'));
   readonly assetChart = computed(() => {
-    const res = this.result();
+    const res = this.planResult();
     const perAccount = (label: string, key: keyof YearResult) => ({
       name: label,
       series: res.years.map((year) => ({ name: String(year.age), value: year[key] as number })),
     });
-    return [
+    const series = [
       perAccount(`${res.scenarioName} total`, 'endingAssets'),
       perAccount('Pre-tax (Traditional)', 'traditionalBalance'),
       perAccount('Roth', 'rothBalance'),
       perAccount('Brokerage', 'brokerageBalance'),
       { name: 'Baseline total', series: this.baseline().years.map((year) => ({ name: String(year.age), value: year.endingAssets })) },
     ];
+    // endingAssets is gross of the SBLOC loan, so plot the compounding loan alongside
+    // the balances whenever the winning run borrowed conversion taxes
+    if (res.years.some((year) => (year.sblocLoanBalance ?? 0) > 0)) {
+      series.push({ name: 'SBLOC loan (owed)', series: res.years.map((year) => ({ name: String(year.age), value: year.sblocLoanBalance ?? 0 })) });
+    }
+    return series;
   });
-  readonly actionPlan = computed(() => generateActionPlan(this.result(), this.state.scenario().filingStatus));
+  // The action plan narrates the winning tax-funding strategy: the SBLOC (BBD) run when it
+  // is feasible (loan stayed within the LTV cap) and beats paying cash after tax, else the
+  // cash run. The comparison cards above still show both so the choice stays visible.
+  readonly sblocWins = computed(() => this.sblocPeakLtv() <= this.sblocMaxLtv && this.sblocEdge() > 0);
+  readonly planResult = computed(() => this.sblocWins() ? this.sblocResult() : this.result());
+  readonly actionPlan = computed(() => generateActionPlan(this.planResult(), this.state.scenario().filingStatus));
   readonly rmdStartAge = computed(() => getRmdStartAge(this.state.scenario().birthYear));
   readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
   readonly resultAfterTax = computed(() => this.afterTaxEndingAssets(this.result()));
