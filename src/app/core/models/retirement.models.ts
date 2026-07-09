@@ -136,4 +136,13 @@ export interface ScenarioResult {
   endingAssets: number;
   // Plain-language explanation of automatic strategy decisions, shown on the dashboard
   note?: string;
+  // The concrete strategy actually simulated to produce `years` — for search-based modes
+  // (auto-optimize, smooth-to-bracket, smooth-income-target) this is the winning candidate,
+  // e.g. a fixed-amount or fill-to-income strategy, not the original search directive.
+  // Lets callers (e.g. Monte Carlo) replay the same strategy without repeating the search.
+  resolvedStrategy?: RothConversionStrategy;
+  // The spending order and pre-retirement-conversion choice that produced `years`, when the
+  // scenario left them open for the engine to decide between.
+  resolvedSpendingOrder?: SpendingOrder;
+  resolvedAllowPreRetirementConversions?: boolean;
 }

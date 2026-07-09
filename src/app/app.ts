@@ -26,6 +26,10 @@ import { AccountSnapshot } from './core/models/retirement.models';
           <mat-icon>tune</mat-icon>
           Scenario
         </a>
+        <a mat-button routerLink="/monte-carlo" routerLinkActive="active-link">
+          <mat-icon>query_stats</mat-icon>
+          Monte Carlo
+        </a>
         <a mat-button href="/runningsteps.html" target="_blank">
           <mat-icon>help</mat-icon>
           Help
