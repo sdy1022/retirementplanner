@@ -89,6 +89,45 @@ export function irmaaAnnualSurcharge(magi: number, filingStatus: FilingStatus, i
   return Math.round(monthly * 12 * persons * 100) / 100;
 }
 
+// 2026 long-term capital gains / qualified dividend breakpoints (taxable income) per
+// Rev. Proc. 2025-32: 0% up to the first threshold, 15% up to the second, 20% above.
+// Inflation-indexed alongside the ordinary brackets.
+const CAPITAL_GAINS_BRACKETS_2026: Record<FilingStatus, { zeroRateMax: number; fifteenRateMax: number }> = {
+  single: { zeroRateMax: 49450, fifteenRateMax: 545500 },
+  married_filing_jointly: { zeroRateMax: 98900, fifteenRateMax: 613700 },
+};
+
+// Long-term gains and qualified dividends stack ON TOP of ordinary taxable income: the
+// 0/15/20% band each gain dollar lands in depends on where the ordinary income already
+// reached. ordinaryTaxableIncome is income AFTER deductions (the same base the ordinary
+// brackets tax); gains below the 0% breakpoint are tax-free, which is why a low-income
+// retiree can realize substantial gains at 0%.
+export function capitalGainsFederalTax(gains: number, ordinaryTaxableIncome: number, filingStatus: FilingStatus, inflationFactor = 1): number {
+  if (gains <= 0) return 0;
+  const zeroMax = CAPITAL_GAINS_BRACKETS_2026[filingStatus].zeroRateMax * inflationFactor;
+  const fifteenMax = CAPITAL_GAINS_BRACKETS_2026[filingStatus].fifteenRateMax * inflationFactor;
+  const start = Math.max(0, ordinaryTaxableIncome);
+  const zeroPortion = Math.min(gains, Math.max(0, zeroMax - start));
+  const fifteenPortion = Math.min(gains - zeroPortion, Math.max(0, fifteenMax - Math.max(start, zeroMax)));
+  const twentyPortion = gains - zeroPortion - fifteenPortion;
+  return Math.round((fifteenPortion * 0.15 + twentyPortion * 0.2) * 100) / 100;
+}
+
+// Net Investment Income Tax: 3.8% on the lesser of net investment income and the MAGI
+// excess over the statutory thresholds — which are NOT inflation-indexed, so more
+// retirees cross them every year by design.
+export const NIIT_RATE = 0.038;
+const NIIT_MAGI_THRESHOLD: Record<FilingStatus, number> = {
+  single: 200000,
+  married_filing_jointly: 250000,
+};
+
+export function netInvestmentIncomeTax(netInvestmentIncome: number, magi: number, filingStatus: FilingStatus): number {
+  if (netInvestmentIncome <= 0) return 0;
+  const excess = Math.max(0, magi - NIIT_MAGI_THRESHOLD[filingStatus]);
+  return Math.round(NIIT_RATE * Math.min(netInvestmentIncome, excess) * 100) / 100;
+}
+
 // Additional standard deduction for taxpayers 65+ (IRC §63(f)), 2026 amounts per
 // Rev. Proc. 2025-32: $2,050 for unmarried filers, $1,650 per qualifying spouse for MFJ.
 // Inflation-indexed like the basic standard deduction.

@@ -2,7 +2,7 @@ import { AccountSnapshot, FilingStatus, RothConversionStrategy, SblocTaxFunding,
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { taxableSocialSecurity } from './social-security-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
-import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge, seniorDeduction } from './tax-tables';
+import { BRACKET_INFLATION_RATE, capitalGainsFederalTax, getTaxTable, irmaaAnnualSurcharge, netInvestmentIncomeTax, seniorDeduction } from './tax-tables';
 
 export interface ConversionSimulationInput {
   accounts: AccountSnapshot[];
@@ -27,6 +27,20 @@ export interface ConversionSimulationInput {
   // Annual Social Security COLA, compounded from the simulation's first year.
   // Defaults to DEFAULT_SS_COLA_RATE; pass 0 to model a frozen benefit.
   ssColaRate?: number;
+  // MAGI from two years before the simulation starts, used for the IRMAA lookback in the
+  // first two Medicare years when the simulation has no history of its own. Without it,
+  // those years fall back to current-year MAGI (which counts this year's conversions).
+  preSimulationMagi?: number;
+  // Spouse modeling (MFJ only): when spouseCurrentAge and spouseLifeExpectancy are both
+  // set, the year after the spouse dies the plan transitions to single filing status
+  // (single brackets/deductions, single IRMAA thresholds, one Medicare enrollee) — the
+  // "widow's tax penalty" — and the survivor keeps the LARGER of the two Social Security
+  // benefits. All balances are assumed jointly owned and roll to the survivor.
+  spouseCurrentAge?: number;
+  spouseLifeExpectancy?: number;
+  // Spouse monthly benefit at the spouse's claim age (already claiming-age-adjusted)
+  spouseSsPia?: number;
+  spouseSsClaimAge?: number;
   taxYear?: number;
   allowPreRetirementConversions?: boolean;
   annualWageGrowth?: number;
@@ -91,10 +105,23 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
     // Beginning-of-year balance (≈ prior Dec 31 after growth), matching the IRS RMD basis
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
-    // Benefit as entered (already adjusted for the claim age), indexed by COLA from the
-    // simulation's first year — SSA applies COLA to the record before and after claiming
+    // Spouse survivorship: the spouse is alive through the year they reach their life
+    // expectancy (final joint return), and the plan files single from the next year on.
+    const spouseModeled = input.filingStatus === 'married_filing_jointly'
+      && input.spouseCurrentAge !== undefined && input.spouseLifeExpectancy !== undefined;
+    const spouseAgeNow = spouseModeled ? input.spouseCurrentAge! + (age - startAge) : undefined;
+    const spouseAlive = !spouseModeled || spouseAgeNow! <= input.spouseLifeExpectancy!;
+    const filingStatus: FilingStatus = spouseModeled && !spouseAlive ? 'single' : input.filingStatus;
+
+    // Benefits as entered (already adjusted for each claim age), indexed by COLA from the
+    // simulation's first year — SSA applies COLA to the record before and after claiming.
+    // While both spouses are alive their benefits add; the survivor keeps the larger one.
     const ssColaFactor = Math.pow(1 + (input.ssColaRate ?? DEFAULT_SS_COLA_RATE), age - startAge);
-    const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
+    const primarySsStream = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
+    const spouseSsStream = (spouseModeled && input.spouseSsPia && input.spouseSsClaimAge && spouseAgeNow! >= input.spouseSsClaimAge)
+      ? roundCurrency(input.spouseSsPia * 12 * ssColaFactor)
+      : 0;
+    const ssIncome = spouseModeled && !spouseAlive ? Math.max(primarySsStream, spouseSsStream) : primarySsStream + spouseSsStream;
     // Sizing pass assumes the 85% cap (true whenever conversions/RMDs fill the brackets);
     // the exact provisional-income amount is computed once withdrawals are known
     const taxableSsEstimate = roundCurrency(ssIncome * 0.85);
@@ -102,7 +129,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Index brackets and standard deduction to the simulated year so frozen base-year
     // brackets don't create artificial bracket creep against inflating balances/expenses
     const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, age - startAge);
-    const table = getTaxTable(taxYear, input.filingStatus, inflationFactor);
+    const table = getTaxTable(taxYear, filingStatus, inflationFactor);
 
     // Living expenses are covered by SS and RMD cash first, then traditional withdrawals up to the
     // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
@@ -117,7 +144,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
 
     const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsEstimate + rmd;
-    const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, input.filingStatus, taxYear, inflationFactor) + table.standardDeduction;
+    const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, filingStatus, taxYear, inflationFactor) + table.standardDeduction;
     const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
     // 'brokerage-first' skips the low-bracket harvest so conversions get the bracket room instead
     const fromTraditionalLow = input.spendingOrder === 'brokerage-first'
@@ -136,23 +163,22 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const canConvert = (isRetired || (input.allowPreRetirementConversions ?? false)) && !guardrailDecision.pauseConversion;
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
-    const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
+    const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
     // Exact Social Security taxability via the provisional-income formula, now that all
     // non-SS ordinary income is known (below the 85% sizing estimate in low-income years)
     const nonSsOrdinaryIncome = currentWage + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
-    let taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, input.filingStatus));
+    let taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, filingStatus));
     let taxableIncome = roundCurrency(nonSsOrdinaryIncome + taxableSsIncome);
     // State (e.g. Indiana): flat rate on ordinary income, Social Security exempt,
     // no federal-style standard deduction
     const stateTaxableIncome = Math.max(0, nonSsOrdinaryIncome);
     const brokerageGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
     const realizedGain = roundCurrency(fromBrokerage * brokerageGainFraction);
-    const capitalGainsFederalTax = roundCurrency(realizedGain * LONG_TERM_CAPITAL_GAINS_RATE);
     const capitalGainsStateTax = roundCurrency(realizedGain * input.stateTaxRate);
     // Dividends are a slice of the total return that gets taxed annually even when
-    // reinvested; the reinvestment raises cost basis after the year's growth is applied
+    // reinvested; the reinvestment raises cost basis after the year's growth is applied.
+    // All dividends are treated as qualified (taxed at capital-gains rates).
     const dividends = roundCurrency(brokerageBalance * (input.dividendYield ?? 0));
-    const dividendFederalTax = roundCurrency(dividends * LONG_TERM_CAPITAL_GAINS_RATE);
     const dividendStateTax = roundCurrency(dividends * input.stateTaxRate);
     // Senior deductions (the 65+ additional standard deduction, plus the OBBBA enhanced
     // deduction through 2028, phased out on MAGI) shrink the ordinary income fed to the
@@ -160,27 +186,43 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // against this year's MAGI proxy; the later tax-payment gross-up raises MAGI slightly
     // but the deduction is not re-solved for that second-order effect.
     const calendarYear = taxYear + (age - startAge);
-    const extraDeduction = seniorDeduction(age, input.filingStatus, calendarYear, roundCurrency(taxableIncome + realizedGain + dividends), inflationFactor);
-    const fedOrdinaryTax = (gross: number) => calculateTax(Math.max(0, gross - extraDeduction), input.filingStatus, taxYear, inflationFactor);
+    const extraDeduction = seniorDeduction(age, filingStatus, calendarYear, roundCurrency(taxableIncome + realizedGain + dividends), inflationFactor);
+    const fedOrdinaryTax = (gross: number) => calculateTax(Math.max(0, gross - extraDeduction), filingStatus, taxYear, inflationFactor);
+    // Long-term gains and qualified dividends stack on top of ordinary taxable income
+    // through the 0/15/20% bands (a low-income year taxes gains at 0%), plus the 3.8%
+    // NIIT once MAGI crosses the unindexed statutory threshold.
+    const ordinaryTaxableAfterDeductions = Math.max(0, taxableIncome - extraDeduction - table.standardDeduction);
+    const investmentGains = roundCurrency(realizedGain + dividends);
+    const magiProxy = roundCurrency(taxableIncome + realizedGain + dividends);
+    const investmentFederalTax = roundCurrency(
+      capitalGainsFederalTax(investmentGains, ordinaryTaxableAfterDeductions, filingStatus, inflationFactor)
+      + netInvestmentIncomeTax(investmentGains, magiProxy, filingStatus),
+    );
+    // Traditional withdrawals before 59½ owe the 10% early-distribution penalty (Roth
+    // conversions themselves are exempt; penalty exceptions like 72(t)/rule-of-55 are not
+    // modeled). Roth earnings withdrawals would also owe it, but Roth basis isn't tracked.
+    const expensePenalty = age < 59.5 ? roundCurrency(0.1 * fromTraditional) : 0;
     // Working years: wages cover their own taxes, so the plan is charged only the
     // incremental tax the conversion adds on top of wage income.
     let federalTax = isRetired
-      ? roundCurrency(fedOrdinaryTax(taxableIncome) + capitalGainsFederalTax + dividendFederalTax)
+      ? roundCurrency(fedOrdinaryTax(taxableIncome) + investmentFederalTax + expensePenalty)
       : roundCurrency((conversion > 0
           ? fedOrdinaryTax(taxableIncome) - fedOrdinaryTax(taxableIncome - conversion)
-          : 0) + dividendFederalTax);
+          : 0) + investmentFederalTax + expensePenalty);
     let stateTax = isRetired
       ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
-      : roundCurrency((conversion > 0 ? conversion * input.stateTaxRate : 0) + dividendStateTax);
+      : roundCurrency((conversion > 0 ? conversion * input.stateTaxRate : 0) + capitalGainsStateTax + dividendStateTax);
     let totalTax = roundCurrency(federalTax + stateTax);
-    let marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
+    let marginalRate = getMarginalBracket(taxableIncome, filingStatus, taxYear, inflationFactor).rate;
 
     // IRMAA: Medicare surcharge from 65 on, cliff-based on MAGI from two years prior.
-    // MAGI proxy = gross ordinary income + realized capital gains + dividends.
-    let magi = roundCurrency(taxableIncome + realizedGain + dividends);
+    // MAGI proxy = gross ordinary income + realized capital gains + dividends. For lookback
+    // years before the simulation started, preSimulationMagi (the user's actual income two
+    // years ago) is used when provided; otherwise current-year MAGI stands in.
+    let magi = magiProxy;
     magiByAge.set(age, magi);
-    const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? magi;
-    const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus, inflationFactor) : 0;
+    const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? input.preSimulationMagi ?? magi;
+    const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, filingStatus, inflationFactor) : 0;
 
     traditionalBalance = Math.max(0, traditionalBalance - rmd - fromTraditional - conversion);
     brokerageBalance = roundCurrency(brokerageBalance + rmd - rmdSpentOnExpenses - fromBrokerage);
@@ -206,15 +248,51 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     }
 
     const totalOutflow = roundCurrency(totalTax + irmaa - sblocDraw);
-    let taxFromBrokerage = totalOutflow;
+    // Selling brokerage to pay taxes realizes gains pro-rata (same lot mix as any other
+    // sale — not a basis-first fiction), and that gain triggers more capital-gains tax,
+    // NIIT, and state tax, requiring a slightly larger sale. Solved by fixed-point
+    // iteration, the same pattern as the traditional gross-up below.
+    const paymentGainFraction = brokerageBalance > 0 ? Math.max(0, brokerageBalance - brokerageBasis) / brokerageBalance : 0;
+    const cgTaxBase = capitalGainsFederalTax(investmentGains, ordinaryTaxableAfterDeductions, filingStatus, inflationFactor)
+      + netInvestmentIncomeTax(investmentGains, magi, filingStatus);
+    const paymentSaleTax = (sale: number): number => {
+      const gain = sale * paymentGainFraction;
+      if (gain <= 0) return 0;
+      const fedDelta = capitalGainsFederalTax(investmentGains + gain, ordinaryTaxableAfterDeductions, filingStatus, inflationFactor)
+        + netInvestmentIncomeTax(investmentGains + gain, magi + gain, filingStatus)
+        - cgTaxBase;
+      return roundCurrency(fedDelta + gain * input.stateTaxRate);
+    };
+    let sale = Math.min(brokerageBalance, totalOutflow);
+    if (paymentGainFraction > 0 && totalOutflow > 0) {
+      for (let i = 0; i < 20; i++) {
+        const next = Math.min(brokerageBalance, roundCurrency(totalOutflow + paymentSaleTax(sale)));
+        if (Math.abs(next - sale) < 0.01) {
+          sale = next;
+          break;
+        }
+        sale = next;
+      }
+    }
+    const saleTax = paymentSaleTax(sale);
+    const saleGain = roundCurrency(sale * paymentGainFraction);
+    if (saleTax > 0) {
+      // Fold the payment-sale gain into the year's reported taxes and MAGI
+      stateTax = roundCurrency(stateTax + saleGain * input.stateTaxRate);
+      federalTax = roundCurrency(federalTax + saleTax - saleGain * input.stateTaxRate);
+      totalTax = roundCurrency(federalTax + stateTax);
+      magi = roundCurrency(magi + saleGain);
+      magiByAge.set(age, magi);
+    }
+    const owed = roundCurrency(totalOutflow + saleTax);
+    let taxFromBrokerage = sale;
     let actualRothDeposit = conversion;
     let unpaidOutflow = 0;
-    if (brokerageBalance >= totalOutflow) {
-      brokerageBalance = roundCurrency(brokerageBalance - totalOutflow);
-    } else {
-      taxFromBrokerage = brokerageBalance;
-      const unpaidTax = roundCurrency(totalOutflow - brokerageBalance);
-      brokerageBalance = 0;
+    brokerageBalance = roundCurrency(brokerageBalance - sale);
+    brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - sale * (1 - paymentGainFraction)));
+    if (roundCurrency(owed - sale) > 0.01) {
+      // Brokerage exhausted: the remainder falls to the existing waterfall
+      const unpaidTax = roundCurrency(owed - sale);
       if (age >= 59.5) {
         actualRothDeposit = Math.max(0, conversion - unpaidTax);
         // Whatever the conversion withholding couldn't cover has no funding source
@@ -226,7 +304,6 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       }
     }
     rothBalance += actualRothDeposit;
-    // Tax payments draw down basis first (untaxed); keep basis within the remaining balance
     brokerageBasis = Math.min(brokerageBasis, brokerageBalance);
 
     // Taxes still unpaid after brokerage and conversion withholding are funded from the
@@ -235,12 +312,16 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // is itself ordinary income, so it is grossed up for the extra tax it creates (solved
     // by fixed-point iteration), even when that spills into a higher bracket.
     let taxFromTraditional = 0;
+    let grossUpPenalty = 0;
     if (unpaidOutflow > 0 && traditionalBalance > 0) {
       const baseFederalTax = fedOrdinaryTax(taxableIncome);
+      // Before 59½ the withdrawal is an early distribution, so the gross-up must also
+      // cover its own 10% penalty
       const grossUpTax = (extra: number): number => {
-        const ssTaxable = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + extra, input.filingStatus));
+        const ssTaxable = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + extra, filingStatus));
         const fedDelta = fedOrdinaryTax(roundCurrency(nonSsOrdinaryIncome + extra + ssTaxable)) - baseFederalTax;
-        return roundCurrency(fedDelta + extra * input.stateTaxRate);
+        const penalty = age < 59.5 ? 0.1 * extra : 0;
+        return roundCurrency(fedDelta + penalty + extra * input.stateTaxRate);
       };
       let withdrawal = Math.min(traditionalBalance, unpaidOutflow);
       for (let i = 0; i < 30; i++) {
@@ -252,17 +333,18 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
         withdrawal = next;
       }
       const extraTax = grossUpTax(withdrawal);
+      grossUpPenalty = age < 59.5 ? roundCurrency(0.1 * withdrawal) : 0;
       taxFromTraditional = withdrawal;
       traditionalBalance = roundCurrency(traditionalBalance - withdrawal);
       unpaidOutflow = roundCurrency(Math.max(0, unpaidOutflow + extraTax - withdrawal));
       // Fold the gross-up income into the year's reported income, tax, and MAGI figures
-      taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + withdrawal, input.filingStatus));
+      taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + withdrawal, filingStatus));
       taxableIncome = roundCurrency(nonSsOrdinaryIncome + withdrawal + taxableSsIncome);
       stateTax = roundCurrency(stateTax + withdrawal * input.stateTaxRate);
       federalTax = roundCurrency(federalTax + extraTax - withdrawal * input.stateTaxRate);
       totalTax = roundCurrency(federalTax + stateTax);
-      marginalRate = getMarginalBracket(taxableIncome, input.filingStatus, taxYear, inflationFactor).rate;
-      magi = roundCurrency(taxableIncome + realizedGain + dividends);
+      marginalRate = getMarginalBracket(taxableIncome, filingStatus, taxYear, inflationFactor).rate;
+      magi = roundCurrency(taxableIncome + realizedGain + dividends + saleGain);
       magiByAge.set(age, magi);
     }
 
@@ -331,6 +413,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       expensesFromBrokerage: roundCurrency(fromBrokerage),
       expensesFromRoth: roundCurrency(fromRoth),
       taxFromBrokerage: roundCurrency(taxFromBrokerage),
+      earlyWithdrawalPenalty: roundCurrency(expensePenalty + grossUpPenalty),
       taxWithheldFromConversion: roundCurrency(Math.max(0, conversion - actualRothDeposit)),
       taxFromTraditional: roundCurrency(taxFromTraditional),
       taxFromRoth: roundCurrency(rothForTax),

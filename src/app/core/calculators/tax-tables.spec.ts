@@ -1,4 +1,4 @@
-import { irmaaAnnualSurcharge, seniorDeduction } from './tax-tables';
+import { capitalGainsFederalTax, irmaaAnnualSurcharge, netInvestmentIncomeTax, seniorDeduction } from './tax-tables';
 
 describe('tax-tables', () => {
   describe('seniorDeduction', () => {
@@ -30,6 +30,40 @@ describe('tax-tables', () => {
 
     it('inflation-indexes the additional deduction but not the statutory OBBBA amounts', () => {
       expect(seniorDeduction(65, 'single', 2028, 50000, 1.03)).toBeCloseTo(2050 * 1.03 + 6000, 2);
+    });
+  });
+
+  describe('capitalGainsFederalTax', () => {
+    it('taxes gains below the 0% breakpoint at zero', () => {
+      expect(capitalGainsFederalTax(30000, 0, 'single')).toBe(0);
+    });
+
+    it('stacks gains on ordinary income across the 0/15 boundary', () => {
+      // Ordinary taxable $40,000: the first $9,450 of gains ride free up to the $49,450
+      // breakpoint, the remaining $10,550 pay 15%
+      expect(capitalGainsFederalTax(20000, 40000, 'single')).toBe(1582.5);
+    });
+
+    it('taxes gains stacked above the 15% breakpoint at 20%', () => {
+      expect(capitalGainsFederalTax(100000, 600000, 'single')).toBe(20000);
+    });
+
+    it('inflation-indexes the breakpoints', () => {
+      // Ordinary income exactly at the base-year 0% breakpoint: all gains at 15%
+      expect(capitalGainsFederalTax(30000, 49450, 'single')).toBe(4500);
+      // With 3% inflation the 0% band extends to $50,933.50, freeing the first $1,483.50
+      expect(capitalGainsFederalTax(30000, 49450, 'single', 1.03)).toBeCloseTo(4277.47, 1);
+    });
+  });
+
+  describe('netInvestmentIncomeTax', () => {
+    it('is zero below the MAGI threshold', () => {
+      expect(netInvestmentIncomeTax(50000, 150000, 'single')).toBe(0);
+    });
+
+    it('charges 3.8% on the lesser of NII and the MAGI excess', () => {
+      expect(netInvestmentIncomeTax(50000, 220000, 'single')).toBe(760); // excess $20k binds
+      expect(netInvestmentIncomeTax(10000, 300000, 'single')).toBe(380); // NII binds
     });
   });
 

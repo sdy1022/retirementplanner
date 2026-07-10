@@ -30,6 +30,11 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
           <mat-form-field><mat-label>SS claim age</mat-label><input matInput type="number" formControlName="ssClaimAge" /></mat-form-field>
           <mat-form-field><mat-label>Monthly SS benefit at claim age</mat-label><input matInput type="number" formControlName="ssPia" /></mat-form-field>
           <mat-form-field><mat-label>SS COLA rate</mat-label><input matInput type="number" step="0.005" formControlName="ssColaRate" /></mat-form-field>
+          <mat-form-field><mat-label>MAGI 2 years ago (IRMAA, 0 = skip)</mat-label><input matInput type="number" formControlName="preSimulationMagi" /></mat-form-field>
+          <mat-form-field><mat-label>Spouse current age (0 = no spouse model)</mat-label><input matInput type="number" formControlName="spouseCurrentAge" /></mat-form-field>
+          <mat-form-field><mat-label>Spouse life expectancy</mat-label><input matInput type="number" formControlName="spouseLifeExpectancy" /></mat-form-field>
+          <mat-form-field><mat-label>Spouse monthly SS at claim age</mat-label><input matInput type="number" formControlName="spouseSsPia" /></mat-form-field>
+          <mat-form-field><mat-label>Spouse SS claim age</mat-label><input matInput type="number" formControlName="spouseSsClaimAge" /></mat-form-field>
           <mat-form-field><mat-label>Life expectancy</mat-label><input matInput type="number" formControlName="lifeExpectancy" /></mat-form-field>
           <mat-form-field><mat-label>Return rate</mat-label><input matInput type="number" step="0.01" formControlName="assumedReturnRate" /></mat-form-field>
           <mat-form-field><mat-label>State tax rate</mat-label><input matInput type="number" step="0.01" formControlName="stateTaxRate" /></mat-form-field>
@@ -108,6 +113,11 @@ export class ScenarioBuilder {
     ssClaimAge: [this.state.scenario().ssClaimAge, Validators.required],
     ssPia: [this.state.scenario().ssPia, Validators.required],
     ssColaRate: [this.state.scenario().ssColaRate ?? DEFAULT_SS_COLA_RATE],
+    preSimulationMagi: [this.state.scenario().preSimulationMagi ?? 0],
+    spouseCurrentAge: [this.state.scenario().spouseCurrentAge ?? 0],
+    spouseLifeExpectancy: [this.state.scenario().spouseLifeExpectancy ?? 0],
+    spouseSsPia: [this.state.scenario().spouseSsPia ?? 0],
+    spouseSsClaimAge: [this.state.scenario().spouseSsClaimAge ?? 0],
     lifeExpectancy: [this.state.scenario().lifeExpectancy, Validators.required],
     assumedReturnRate: [this.state.scenario().assumedReturnRate, Validators.required],
     stateTaxRate: [this.state.scenario().stateTaxRate],
@@ -150,6 +160,12 @@ export class ScenarioBuilder {
       ssClaimAge: value.ssClaimAge as Scenario['ssClaimAge'],
       ssPia: value.ssPia,
       ssColaRate: value.ssColaRate,
+      // 0 in the form means "not used" for these optional inputs
+      preSimulationMagi: value.preSimulationMagi > 0 ? value.preSimulationMagi : undefined,
+      spouseCurrentAge: value.spouseCurrentAge > 0 ? value.spouseCurrentAge : undefined,
+      spouseLifeExpectancy: value.spouseLifeExpectancy > 0 ? value.spouseLifeExpectancy : undefined,
+      spouseSsPia: value.spouseSsPia > 0 ? value.spouseSsPia : undefined,
+      spouseSsClaimAge: value.spouseSsClaimAge > 0 ? value.spouseSsClaimAge : undefined,
       lifeExpectancy: value.lifeExpectancy,
       filingStatus: value.filingStatus as Scenario['filingStatus'],
       rothConversionStrategy,

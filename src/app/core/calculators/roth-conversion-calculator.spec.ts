@@ -104,24 +104,39 @@ describe('roth-conversion-calculator', () => {
     expect(year.expensesFromTraditional).toBe(0);
   });
 
-  it('taxes reinvested dividends annually and adds them to cost basis', () => {
-    const [year] = simulateConversionStrategy({
-      accounts: [{ type: 'brokerage', balance: 100000, costBasis: 100000, snapshotDate: '2026-01-01' }],
-      strategy: { mode: 'none' },
+  it('taxes reinvested dividends annually, stacked through the 0% band, and adds them to basis', () => {
+    const base = {
+      accounts: [{ type: 'brokerage' as const, balance: 100000, costBasis: 100000, snapshotDate: '2026-01-01' }],
+      strategy: { mode: 'none' as const },
       currentAge: 60,
       endAge: 60,
       birthYear: 1966,
-      filingStatus: 'single',
+      filingStatus: 'single' as const,
       assumedReturnRate: 0,
       stateTaxRate: 0,
       retirementAge: 60,
       dividendYield: 0.02,
-    });
+    };
 
-    // $2,000 of dividends taxed at 15% = $300, paid from brokerage; the reinvested
-    // dividends raise basis, capped at the remaining balance.
-    expect(year.totalTax).toBe(300);
-    expect(year.brokerageBalance).toBe(99700);
-    expect(year.brokerageBasis).toBe(99700);
+    // With no other income, $2,000 of qualified dividends fall in the 0% capital-gains
+    // band — no federal tax. Reinvested dividends still raise basis.
+    const [year] = simulateConversionStrategy(base);
+    expect(year.totalTax).toBe(0);
+    expect(year.brokerageBalance).toBe(100000);
+    expect(year.brokerageBasis).toBe(100000);
+
+    // With ordinary income past the 0% breakpoint ($49,450 taxable), the same dividends
+    // are taxed at 15% = $300. Ordinary tax on the $80k conversion ($63,900 taxable):
+    // $1,240 + $4,560 + $13,500 * 22% = $8,770; total $9,070. The payment sale is all
+    // basis (no embedded gain), so no further gain is triggered.
+    const [highIncomeYear] = simulateConversionStrategy({
+      ...base,
+      accounts: [
+        { type: 'traditional_ira' as const, balance: 1000000, snapshotDate: '2026-01-01' },
+        ...base.accounts,
+      ],
+      strategy: { mode: 'fixed-amount' as const, amount: 80000 },
+    });
+    expect(highIncomeYear.totalTax).toBe(9070);
   });
 });

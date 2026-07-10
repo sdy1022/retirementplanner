@@ -41,6 +41,19 @@ export interface Scenario {
   // year (SSA statements quote today's dollars; benefits are COLA-indexed both before and
   // after claiming). Defaults to 2.5% — roughly the long-run average COLA.
   ssColaRate?: number;
+  // MAGI from two years before the plan starts — drives IRMAA in the first two Medicare
+  // years when the simulation has no history of its own (only matters when the plan
+  // starts at age 63+). Unset falls back to current-year MAGI.
+  preSimulationMagi?: number;
+  // Optional spouse modeling (MFJ only): the year after the spouse dies, the plan files
+  // single (single brackets/deductions/IRMAA, one Medicare enrollee — the "widow's tax
+  // penalty") and the survivor keeps the LARGER of the two Social Security benefits.
+  // All balances roll to the survivor. Leave unset to keep MFJ for the whole plan.
+  spouseCurrentAge?: number;
+  spouseLifeExpectancy?: number;
+  // Spouse's monthly benefit at the spouse's claim age (already claiming-age-adjusted)
+  spouseSsPia?: number;
+  spouseSsClaimAge?: number;
   lifeExpectancy: number;
   filingStatus: FilingStatus;
   rothConversionStrategy: RothConversionStrategy;
@@ -121,6 +134,8 @@ export interface YearResult {
   expensesFromRoth: number;
   // Funding sources for the year's taxes and IRMAA
   taxFromBrokerage: number;
+  // 10% early-distribution penalty on pre-59½ traditional withdrawals (included in federalTax)
+  earlyWithdrawalPenalty?: number;
   taxWithheldFromConversion: number;
   // Grossed-up traditional withdrawal that pays taxes once brokerage and conversion
   // withholding are exhausted — drains pre-tax dollars before Roth is touched
