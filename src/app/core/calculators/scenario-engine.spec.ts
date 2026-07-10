@@ -100,8 +100,9 @@ describe('scenario-engine', () => {
     expect(y60.conversion).toBeGreaterThan(0);
     expect(y61.taxableIncome).toBe(y60.taxableIncome);
     expect(y62.taxableIncome).toBe(y61.taxableIncome);
-    // ...because the conversion drops by exactly the taxable portion of the annual SS benefit ($2,800 * 12 * 0.85).
-    expect(y61.conversion - y62.conversion).toBe(28560);
+    // ...because the conversion drops by exactly the taxable portion of the annual SS benefit,
+    // COLA-indexed from the simulation start: $2,800 * 12 * 1.025^2 * 0.85 = $30,005.85.
+    expect(y61.conversion - y62.conversion).toBeCloseTo(30005.85, 2);
 
     // Every RMD year lands at or below the target bracket.
     const rmdYears = result.years.filter(y => y.rmd > 0);
@@ -198,9 +199,69 @@ describe('scenario-engine', () => {
     // No Medicare before 65.
     expect(byAge.get(63)!.irmaa).toBe(0);
     expect(byAge.get(64)!.irmaa).toBe(0);
-    // At 65, the surcharge is driven by age-63 MAGI ($200k, single):
-    // above the $171k tier but not above $205k -> $385.00/mo * 12 = $4,620.
-    expect(byAge.get(65)!.irmaa).toBe(4620);
+    // At 65, the surcharge is driven by age-63 MAGI ($200k, single) against the year-65
+    // thresholds, inflated 3%/yr for two years: the $171k tier becomes $181,414 (crossed)
+    // and $205k becomes $217,485 (not crossed) -> $385.00/mo * 1.0609 * 12 = $4,901.36.
+    expect(byAge.get(65)!.irmaa).toBe(4901.36);
+  });
+
+  it('applies Social Security COLA from the simulation start (and freezes at ssColaRate 0)', () => {
+    const scenario: Scenario = {
+      name: 'SS COLA',
+      currentAge: 62,
+      retirementAge: 62,
+      birthYear: 1964,
+      ssClaimAge: 62,
+      ssPia: 1000,
+      lifeExpectancy: 64,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 50000,
+      ssColaRate: 0.02,
+    };
+    const accounts = [{ type: 'brokerage' as const, balance: 500000, snapshotDate: '2026-01-01' }];
+
+    const result = runScenario(scenario, accounts);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    expect(byAge.get(62)!.expensesFromSs).toBe(12000);
+    expect(byAge.get(63)!.expensesFromSs).toBe(12240); // 12,000 * 1.02
+    expect(byAge.get(64)!.expensesFromSs).toBeCloseTo(12484.8, 2); // 12,000 * 1.02^2
+
+    const frozen = runScenario({ ...scenario, ssColaRate: 0 }, accounts);
+    expect(frozen.years.every(y => y.expensesFromSs === 12000)).toBe(true);
+  });
+
+  it('applies the 65+ senior deductions (additional standard deduction + OBBBA bonus) to federal tax', () => {
+    const scenario: Scenario = {
+      name: 'Senior deduction',
+      currentAge: 64,
+      retirementAge: 64,
+      birthYear: 1962,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 65,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 100000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+    };
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 1000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 500000, costBasis: 500000, snapshotDate: '2026-01-01' },
+    ]);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    // Age 64 (2026): no senior deduction. $100k conversion less the $16,100 standard
+    // deduction -> $13,170 federal tax.
+    expect(byAge.get(64)!.federalTax).toBe(13170);
+    // Age 65 (2027): the additional standard deduction ($2,050 * 1.03) plus the OBBBA bonus
+    // ($6,000 less the 6% phaseout above $75k MAGI = $4,500) shave $6,611.50 off ordinary
+    // income -> $11,450.57, vs $12,905.10 from bracket indexing alone.
+    expect(byAge.get(65)!.federalTax).toBe(11450.57);
   });
 
   it('fill-to-income keeps converting past RMD age until conversionStopAge', () => {

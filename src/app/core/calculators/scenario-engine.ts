@@ -88,6 +88,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       retirementAge: scenario.retirementAge,
       ssPia: scenario.ssPia,
       ssClaimAge: scenario.ssClaimAge,
+      ssColaRate: scenario.ssColaRate,
       allowPreRetirementConversions: scenario.allowPreRetirementConversions,
       annualWageGrowth: scenario.annualWageGrowth,
       spendingOrder: scenario.spendingOrder,

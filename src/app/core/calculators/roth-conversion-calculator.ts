@@ -2,7 +2,7 @@ import { AccountSnapshot, FilingStatus, RothConversionStrategy, SblocTaxFunding,
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from './rmd-calculator';
 import { taxableSocialSecurity } from './social-security-calculator';
 import { amountToFillBracket, calculateTax, ceilingForRate, getMarginalBracket, roundCurrency } from './tax-bracket-calculator';
-import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge } from './tax-tables';
+import { BRACKET_INFLATION_RATE, getTaxTable, irmaaAnnualSurcharge, seniorDeduction } from './tax-tables';
 
 export interface ConversionSimulationInput {
   accounts: AccountSnapshot[];
@@ -21,8 +21,12 @@ export interface ConversionSimulationInput {
   annualOtherIncome?: number;
   wageIncome?: number;
   retirementAge?: number;
+  // Monthly benefit at the chosen claim age (already claiming-age-adjusted by the user)
   ssPia?: number;
   ssClaimAge?: number;
+  // Annual Social Security COLA, compounded from the simulation's first year.
+  // Defaults to DEFAULT_SS_COLA_RATE; pass 0 to model a frozen benefit.
+  ssColaRate?: number;
   taxYear?: number;
   allowPreRetirementConversions?: boolean;
   annualWageGrowth?: number;
@@ -45,6 +49,11 @@ export const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
 
 // Living expenses grow with inflation each year after retirement
 const EXPENSE_INFLATION_RATE = 0.03;
+
+// Long-run average Social Security COLA. Benefits are COLA-indexed every year (both before
+// and after claiming), so a benefit quoted in today's dollars grows at this rate from the
+// simulation's first year unless the scenario overrides it.
+export const DEFAULT_SS_COLA_RATE = 0.025;
 
 // Traditional withdrawals up to the top of this bracket are cheap; harvest that space
 // for living expenses before touching brokerage or Roth
@@ -82,7 +91,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
     // Beginning-of-year balance (≈ prior Dec 31 after growth), matching the IRS RMD basis
     const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
-    const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? input.ssPia * 12 : 0;
+    // Benefit as entered (already adjusted for the claim age), indexed by COLA from the
+    // simulation's first year — SSA applies COLA to the record before and after claiming
+    const ssColaFactor = Math.pow(1 + (input.ssColaRate ?? DEFAULT_SS_COLA_RATE), age - startAge);
+    const ssIncome = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
     // Sizing pass assumes the 85% cap (true whenever conversions/RMDs fill the brackets);
     // the exact provisional-income amount is computed once withdrawals are known
     const taxableSsEstimate = roundCurrency(ssIncome * 0.85);
@@ -142,12 +154,20 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const dividends = roundCurrency(brokerageBalance * (input.dividendYield ?? 0));
     const dividendFederalTax = roundCurrency(dividends * LONG_TERM_CAPITAL_GAINS_RATE);
     const dividendStateTax = roundCurrency(dividends * input.stateTaxRate);
+    // Senior deductions (the 65+ additional standard deduction, plus the OBBBA enhanced
+    // deduction through 2028, phased out on MAGI) shrink the ordinary income fed to the
+    // bracket math — equivalent to a larger standard deduction. The phaseout is solved
+    // against this year's MAGI proxy; the later tax-payment gross-up raises MAGI slightly
+    // but the deduction is not re-solved for that second-order effect.
+    const calendarYear = taxYear + (age - startAge);
+    const extraDeduction = seniorDeduction(age, input.filingStatus, calendarYear, roundCurrency(taxableIncome + realizedGain + dividends), inflationFactor);
+    const fedOrdinaryTax = (gross: number) => calculateTax(Math.max(0, gross - extraDeduction), input.filingStatus, taxYear, inflationFactor);
     // Working years: wages cover their own taxes, so the plan is charged only the
     // incremental tax the conversion adds on top of wage income.
     let federalTax = isRetired
-      ? roundCurrency(calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) + capitalGainsFederalTax + dividendFederalTax)
+      ? roundCurrency(fedOrdinaryTax(taxableIncome) + capitalGainsFederalTax + dividendFederalTax)
       : roundCurrency((conversion > 0
-          ? calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor) - calculateTax(taxableIncome - conversion, input.filingStatus, taxYear, inflationFactor)
+          ? fedOrdinaryTax(taxableIncome) - fedOrdinaryTax(taxableIncome - conversion)
           : 0) + dividendFederalTax);
     let stateTax = isRetired
       ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
@@ -160,7 +180,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     let magi = roundCurrency(taxableIncome + realizedGain + dividends);
     magiByAge.set(age, magi);
     const lookbackMagi = magiByAge.get(age - IRMAA_LOOKBACK_YEARS) ?? magi;
-    const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus) : 0;
+    const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, input.filingStatus, inflationFactor) : 0;
 
     traditionalBalance = Math.max(0, traditionalBalance - rmd - fromTraditional - conversion);
     brokerageBalance = roundCurrency(brokerageBalance + rmd - rmdSpentOnExpenses - fromBrokerage);
@@ -176,8 +196,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     let sblocDraw = 0;
     if (sbloc && age >= sbloc.startAge && age <= sbloc.endAge && conversion > 0) {
       const conversionTax = roundCurrency(
-        calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor)
-        - calculateTax(taxableIncome - conversion, input.filingStatus, taxYear, inflationFactor)
+        fedOrdinaryTax(taxableIncome)
+        - fedOrdinaryTax(taxableIncome - conversion)
         + conversion * input.stateTaxRate,
       );
       const ltvRoom = Math.max(0, (sbloc.maxLtv ?? DEFAULT_SBLOC_MAX_LTV) * brokerageBalance - sblocLoanBalance);
@@ -216,10 +236,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // by fixed-point iteration), even when that spills into a higher bracket.
     let taxFromTraditional = 0;
     if (unpaidOutflow > 0 && traditionalBalance > 0) {
-      const baseFederalTax = calculateTax(taxableIncome, input.filingStatus, taxYear, inflationFactor);
+      const baseFederalTax = fedOrdinaryTax(taxableIncome);
       const grossUpTax = (extra: number): number => {
         const ssTaxable = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome + extra, input.filingStatus));
-        const fedDelta = calculateTax(roundCurrency(nonSsOrdinaryIncome + extra + ssTaxable), input.filingStatus, taxYear, inflationFactor) - baseFederalTax;
+        const fedDelta = fedOrdinaryTax(roundCurrency(nonSsOrdinaryIncome + extra + ssTaxable)) - baseFederalTax;
         return roundCurrency(fedDelta + extra * input.stateTaxRate);
       };
       let withdrawal = Math.min(traditionalBalance, unpaidOutflow);

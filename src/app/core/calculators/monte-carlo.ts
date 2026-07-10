@@ -182,6 +182,7 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       retirementAge: scenario.retirementAge,
       ssPia: scenario.ssPia,
       ssClaimAge: scenario.ssClaimAge,
+      ssColaRate: scenario.ssColaRate,
       allowPreRetirementConversions,
       annualWageGrowth: scenario.annualWageGrowth,
       spendingOrder,

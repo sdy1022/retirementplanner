@@ -33,7 +33,14 @@ export interface Scenario {
   retirementAge: number;
   birthYear: number;
   ssClaimAge: 62 | 63 | 64 | 65 | 66 | 67 | 68 | 69 | 70;
+  // Monthly Social Security benefit AT THE CHOSEN CLAIM AGE, in today's dollars — the user
+  // enters the already-adjusted amount (e.g. ~70% of PIA when claiming at 62, ~124% at 70).
+  // The engine does not re-apply claiming-age factors; it only starts payments at ssClaimAge.
   ssPia: number;
+  // Annual Social Security cost-of-living adjustment applied from the simulation's first
+  // year (SSA statements quote today's dollars; benefits are COLA-indexed both before and
+  // after claiming). Defaults to 2.5% — roughly the long-run average COLA.
+  ssColaRate?: number;
   lifeExpectancy: number;
   filingStatus: FilingStatus;
   rothConversionStrategy: RothConversionStrategy;

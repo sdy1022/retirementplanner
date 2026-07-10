@@ -9,6 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
 import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
+import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-calculator';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -27,7 +28,8 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
           <mat-form-field><mat-label>Annual expenses</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
           <mat-form-field><mat-label>Birth year</mat-label><input matInput type="number" formControlName="birthYear" /></mat-form-field>
           <mat-form-field><mat-label>SS claim age</mat-label><input matInput type="number" formControlName="ssClaimAge" /></mat-form-field>
-          <mat-form-field><mat-label>Monthly PIA</mat-label><input matInput type="number" formControlName="ssPia" /></mat-form-field>
+          <mat-form-field><mat-label>Monthly SS benefit at claim age</mat-label><input matInput type="number" formControlName="ssPia" /></mat-form-field>
+          <mat-form-field><mat-label>SS COLA rate</mat-label><input matInput type="number" step="0.005" formControlName="ssColaRate" /></mat-form-field>
           <mat-form-field><mat-label>Life expectancy</mat-label><input matInput type="number" formControlName="lifeExpectancy" /></mat-form-field>
           <mat-form-field><mat-label>Return rate</mat-label><input matInput type="number" step="0.01" formControlName="assumedReturnRate" /></mat-form-field>
           <mat-form-field><mat-label>State tax rate</mat-label><input matInput type="number" step="0.01" formControlName="stateTaxRate" /></mat-form-field>
@@ -105,6 +107,7 @@ export class ScenarioBuilder {
     annualLivingExpenses: [this.state.scenario().annualLivingExpenses ?? 0, Validators.required],
     ssClaimAge: [this.state.scenario().ssClaimAge, Validators.required],
     ssPia: [this.state.scenario().ssPia, Validators.required],
+    ssColaRate: [this.state.scenario().ssColaRate ?? DEFAULT_SS_COLA_RATE],
     lifeExpectancy: [this.state.scenario().lifeExpectancy, Validators.required],
     assumedReturnRate: [this.state.scenario().assumedReturnRate, Validators.required],
     stateTaxRate: [this.state.scenario().stateTaxRate],
@@ -146,6 +149,7 @@ export class ScenarioBuilder {
       birthYear: value.birthYear,
       ssClaimAge: value.ssClaimAge as Scenario['ssClaimAge'],
       ssPia: value.ssPia,
+      ssColaRate: value.ssColaRate,
       lifeExpectancy: value.lifeExpectancy,
       filingStatus: value.filingStatus as Scenario['filingStatus'],
       rothConversionStrategy,
