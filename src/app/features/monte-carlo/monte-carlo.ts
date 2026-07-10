@@ -37,6 +37,50 @@ import { LocalStateService } from '../../core/services/local-state.service';
                 the deterministic plan, restore once back within 5%
               </mat-checkbox>
             </p>
+            @if (useGuardrail) {
+              <div class="guardrail-example">
+                <p class="strategy-note">
+                  <strong>How the guardrail works — a worked example.</strong> At the start of each simulated year, the
+                  assets you actually carry into the year are compared against what the deterministic plan (the dashboard's
+                  flat-return projection) says you would have at the same age. Three rules follow from that ratio:
+                </p>
+                <div class="example-scroll">
+                  <table class="example-table">
+                    <thead>
+                      <tr><th>Age</th><th>Plan balance</th><th>Actual balance</th><th>Actual ÷ plan</th><th>Guardrail action</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>67</td><td>$2,000,000</td><td>$1,980,000</td><td>99%</td>
+                        <td>On track — full spending, this year's Roth conversion proceeds as planned.</td>
+                      </tr>
+                      <tr class="cut">
+                        <td>68</td><td>$2,050,000</td><td>$1,540,000</td><td>75%</td>
+                        <td><strong>More than 20% behind (ratio below 80%) → cut mode:</strong> spend 10% less this year and
+                          skip this year's Roth conversion, so no depressed assets are sold to pay conversion tax.</td>
+                      </tr>
+                      <tr class="cut">
+                        <td>69</td><td>$2,100,000</td><td>$1,790,000</td><td>85%</td>
+                        <td><strong>Still in cut mode.</strong> The ratio is back above the 80% trigger, but restoring requires
+                          95% — this gap (hysteresis) stops spending from flip-flopping up and down each year while assets
+                          hover near the trigger.</td>
+                      </tr>
+                      <tr>
+                        <td>70</td><td>$2,160,000</td><td>$2,110,000</td><td>98%</td>
+                        <td><strong>Recovered past 95% → cut mode ends:</strong> full spending and Roth conversions resume.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="strategy-note">
+                  Why this helps: dollars not spent in a down year stay invested and compound through the recovery, and a
+                  paused conversion defers its tax bill instead of paying it by selling depressed assets. The cut is
+                  deliberately modest, so it lifts a <em>marginal</em> plan's success probability by a few points but cannot
+                  rescue a structurally underfunded one — if the guardrail barely moves your number, the plan was either
+                  already safe or short by far more than 10% of spending.
+                </p>
+              </div>
+            }
             <button mat-flat-button color="primary" [disabled]="running()" (click)="run()">
               {{ running() ? 'Running…' : (result() ? 'Re-run Monte Carlo' : 'Run Monte Carlo (' + (trials | number) + ' trials)') }}
             </button>
@@ -90,6 +134,13 @@ import { LocalStateService } from '../../core/services/local-state.service';
     .mc-loading { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: #5a6b7c; font-size: 0.92rem; }
     .mc-error { background: #fdecea; color: #b71c1c; }
     .guardrail-toggle { margin: 0 0 14px; font-size: 0.92rem; }
+    .guardrail-example { margin: 0 0 14px; }
+    .example-scroll { overflow-x: auto; margin: 0 0 14px; }
+    .example-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; line-height: 1.45; }
+    .example-table th, .example-table td { padding: 8px 12px; border: 1px solid #dde5ec; text-align: left; vertical-align: top; }
+    .example-table thead th { background: #f2f6fa; white-space: nowrap; }
+    .example-table td:nth-child(-n+4) { white-space: nowrap; }
+    .example-table tr.cut { background: #fff7ec; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
