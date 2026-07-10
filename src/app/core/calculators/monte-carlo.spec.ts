@@ -54,6 +54,23 @@ describe('monte-carlo', () => {
     expect(a).toEqual(b);
   });
 
+  it('the fan chart is on the same after-tax basis as the summary percentiles, not gross assets', () => {
+    // Regression test: assetsByAge used to be built from raw year.endingAssets (gross,
+    // pre-tax-on-liquidation), while endingAssetsPercentiles was after-tax — so the same
+    // percentile label ("10th percentile") meant two different numbers depending on which
+    // part of the page you read. Both are now computed via afterTaxAssetsForYear, so the
+    // final-age row of the fan chart must land exactly on the summary percentiles.
+    const heavyTraditionalAccounts = [
+      { type: 'traditional_401k' as const, balance: 2400000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 100000, snapshotDate: '2026-01-01' },
+    ];
+    const result = runMonteCarloSmoothIncomeTarget(wellFundedScenario, heavyTraditionalAccounts, 300, 3);
+    const finalRow = result.assetsByAge.at(-1)!;
+    expect(finalRow.p10).toBe(result.endingAssetsPercentiles.p10);
+    expect(finalRow.p50).toBe(result.endingAssetsPercentiles.p50);
+    expect(finalRow.p90).toBe(result.endingAssetsPercentiles.p90);
+  });
+
   it('a comfortably funded plan succeeds far more often than a barely funded one', () => {
     const comfortable = runMonteCarloSmoothIncomeTarget(wellFundedScenario, wellFundedAccounts, 500, 7);
 

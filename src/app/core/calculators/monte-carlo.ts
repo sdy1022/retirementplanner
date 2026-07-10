@@ -18,9 +18,18 @@ export interface MonteCarloPercentiles {
   p90: number;
 }
 
-// One fan-chart row: the distribution of total (gross) assets across trials at this age
+// One fan-chart row: the distribution of after-tax assets across trials at this age (same
+// liquidation-value basis as endingAssetsPercentiles, so the two are directly comparable)
 export interface MonteCarloAgePercentiles extends MonteCarloPercentiles {
   age: number;
+}
+
+// Liquidation-value basis shared by every after-tax figure in this module (and reused by
+// callers, e.g. the fan-chart page's deterministic comparison line, so both are on the same
+// basis): pre-tax traditional dollars are discounted by the residual tax rate and unrealized
+// brokerage gains by the gains rate, matching the rest of the app's after-tax figures.
+export function afterTaxAssetsForYear(year: YearResult, residualRate: number, gainsRate: number): number {
+  return year.endingAssets - year.traditionalBalance * residualRate - Math.max(0, year.brokerageBalance - year.brokerageBasis) * gainsRate - (year.sblocLoanBalance ?? 0);
 }
 
 export interface MonteCarloResult {
@@ -96,7 +105,8 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
 interface TrialOutcome {
   success: boolean;
   afterTaxEndingAssets: number;
-  // Total (gross) assets at each simulated age, aligned with `ages`
+  // After-tax assets at each simulated age, aligned with `ages` — same liquidation-value
+  // basis as afterTaxEndingAssets, just computed for every year instead of only the last
   assetsByYear: number[];
   ages: number[];
 }
@@ -126,11 +136,9 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
 
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
   const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
-  const afterTaxEndingAssets = (years: YearResult[]): number => {
-    const last = years.at(-1);
-    if (!last) return 0;
-    return last.endingAssets - last.traditionalBalance * residualRate - Math.max(0, last.brokerageBalance - last.brokerageBasis) * gainsRate - (last.sblocLoanBalance ?? 0);
-  };
+  // Applied to every year (not just the last) so the fan chart and the final-year summary
+  // percentiles are on the same basis and directly comparable.
+  const afterTaxAssets = (y: YearResult): number => afterTaxAssetsForYear(y, residualRate, gainsRate);
 
   const rng = createSeededRng(seed);
 
@@ -161,10 +169,11 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       dividendYield: scenario.dividendYield,
       sblocTaxFunding: scenario.sblocTaxFunding,
     });
+    const last = years.at(-1);
     return {
       success: years.every((y) => y.shortfall <= 0.01),
-      afterTaxEndingAssets: afterTaxEndingAssets(years),
-      assetsByYear: years.map((y) => y.endingAssets),
+      afterTaxEndingAssets: last ? afterTaxAssets(last) : 0,
+      assetsByYear: years.map(afterTaxAssets),
       ages: years.map((y) => y.age),
     };
   };

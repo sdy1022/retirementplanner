@@ -4,8 +4,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
-import { DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../../core/calculators/monte-carlo';
-import { runScenario } from '../../core/calculators/scenario-engine';
+import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../../core/calculators/monte-carlo';
+import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from '../../core/calculators/scenario-engine';
 import { LocalStateService } from '../../core/services/local-state.service';
 
 @Component({
@@ -60,13 +60,15 @@ import { LocalStateService } from '../../core/services/local-state.service';
       </section>
       <section class="mc-chart">
         <mat-card>
-          <mat-card-header><mat-card-title>Total Assets by Age — Percentile Fan</mat-card-title></mat-card-header>
+          <mat-card-header><mat-card-title>After-Tax Assets by Age — Percentile Fan</mat-card-title></mat-card-header>
           <mat-card-content>
             <p class="strategy-note">
-              Each line is a percentile of total assets across all {{ mc.trials | number }} trials at that age; the
-              "Deterministic plan" line is the flat-{{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}%-return
-              projection shown on the dashboard. Where the 10th-percentile line dives toward zero is when bad market
-              sequences start to break the plan.
+              Each line is a percentile of after-tax assets (same liquidation-value basis as the percentiles above:
+              pre-tax traditional dollars and unrealized brokerage gains discounted for the tax due if liquidated)
+              across all {{ mc.trials | number }} trials at that age; the "Deterministic plan" line is the flat-
+              {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}%-return projection shown on the dashboard, on
+              the same after-tax basis. Where the 10th-percentile line dives toward zero is when bad market sequences
+              start to break the plan.
             </p>
             <ngx-charts-line-chart [results]="fanChart()" [legend]="true" [xAxis]="true" [yAxis]="true" [autoScale]="true" />
           </mat-card-content>
@@ -97,7 +99,8 @@ export class MonteCarlo {
   readonly finalAge = computed(() => this.result()?.assetsByAge.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
 
   // Percentile fan across trials, plus the deterministic flat-rate projection for reference.
-  // The deterministic run reuses the same engine, so the two are directly comparable.
+  // The deterministic run reuses the same engine and the same after-tax basis as the trial
+  // percentiles, so the two are directly comparable.
   readonly fanChart = computed(() => {
     const mc = this.result();
     if (!mc) return [];
@@ -105,14 +108,20 @@ export class MonteCarlo {
       name: label,
       series: mc.assetsByAge.map((row) => ({ name: String(row.age), value: row[key] })),
     });
-    const deterministic = runScenario(this.state.scenario(), this.state.accounts());
+    const scenario = this.state.scenario();
+    const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+    const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
+    const deterministic = runScenario(scenario, this.state.accounts());
     return [
       band('90th percentile (good markets)', 'p90'),
       band('75th percentile', 'p75'),
       band('Median', 'p50'),
       band('25th percentile', 'p25'),
       band('10th percentile (bad markets)', 'p10'),
-      { name: 'Deterministic plan', series: deterministic.years.map((year) => ({ name: String(year.age), value: year.endingAssets })) },
+      {
+        name: 'Deterministic plan',
+        series: deterministic.years.map((year) => ({ name: String(year.age), value: afterTaxAssetsForYear(year, residualRate, gainsRate) })),
+      },
     ];
   });
 
