@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Help</title>
+    <title>Retirement Strategy Calculator — Help</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -73,6 +73,31 @@
     </style>
 </head>
 <body>
+    <div class="container">
+        <h2>About This App 关于本应用</h2>
+        <p>The <strong>Retirement Strategy Calculator</strong> models retirement drawdown strategies — Roth conversions, Required Minimum Distributions (RMDs), Social Security timing, and Buy-Borrow-Die — over a full lifetime projection, then stress-tests the winning plan with Monte Carlo simulation. It replaces ad-hoc spreadsheet analysis with a repeatable model that lets you:</p>
+        <ul>
+            <li><strong>Snapshot your accounts</strong> — 401(k), Traditional IRA, Roth IRA, and taxable brokerage.</li>
+            <li><strong>Compare strategies side by side</strong> — a "do nothing" baseline vs. Roth conversion strategies (fixed amount, fill-to-bracket, auto-optimize, smooth income target).</li>
+            <li><strong>Pick the right lever per bucket</strong> — the Strategy Selector decides whether Roth conversion (pre-tax dollars) and/or Buy-Borrow-Die (brokerage dollars) add value, since the two act on disjoint money.</li>
+            <li><strong>Get a concrete action plan</strong> — the Dashboard translates the winning tax-funding strategy into year-by-year steps.</li>
+            <li><strong>Quantify the risk</strong> — the Monte Carlo page runs the chosen plan through thousands of randomized market-return sequences (historical block bootstrap) and reports the probability the plan never runs short, plus a percentile fan chart of assets by age.</li>
+        </ul>
+        <p>本工具在整个人生跨度内模拟退休提款策略 —— Roth 转换、法定最低取款额 (RMD)、社会安全金领取时机、以及 Buy-Borrow-Die 策略：录入账户快照 → 多策略并排对比 → 按资产类别（税前 / 证券账户）分别选择最优策略 → 生成逐年行动计划 → 用蒙特卡洛模拟量化"资金终身不枯竭"的成功概率。</p>
+
+        <h3>Pages 页面导航</h3>
+        <table>
+            <tr><th>Page 页面</th><th>Purpose 用途</th></tr>
+            <tr><td><strong>Dashboard</strong></td><td>Strategy comparison, winning-strategy charts, and the year-by-year action plan<br>策略对比、胜出策略图表、逐年行动计划</td></tr>
+            <tr><td><strong>Accounts</strong></td><td>Enter and manage retirement account snapshots<br>录入和管理退休账户快照</td></tr>
+            <tr><td><strong>Scenarios</strong></td><td>Build scenarios: ages, spending, return assumptions, conversion strategy<br>构建情景：年龄、支出、收益率假设、转换策略</td></tr>
+            <tr><td><strong>Monte Carlo</strong></td><td>Success probability, ending-asset percentiles, and the fan chart<br>成功概率、期末资产百分位、扇形图</td></tr>
+            <tr><td><strong>Login</strong></td><td>Optional sign in to save scenarios and accounts — the app works fully without it<br>可选登录以保存情景和账户 —— 不登录也可完整使用</td></tr>
+        </table>
+
+        <div class="takeaway"><strong>⚠️ Disclaimer 免责声明：</strong> This is a modeling tool, not financial or tax advice. Tax tables currently cover single filers (2026), and projections depend entirely on the assumptions you enter. Consult a qualified professional before acting on any strategy.<br>本工具仅用于建模分析，不构成财务或税务建议。当前税表仅覆盖 2026 年单身申报，预测结果完全取决于你输入的假设。在执行任何策略前，请咨询合格的专业人士。</div>
+    </div>
+
     <div class="container">
         <h2>Running Steps</h2>
         <ol>

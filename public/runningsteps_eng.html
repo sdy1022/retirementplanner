@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retirement Strategy Calculator — Help</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 860px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #1a73e8;
+        }
+        h3 {
+            color: #1a73e8;
+            border-bottom: 1px solid #e3eaf3;
+            padding-bottom: 6px;
+            margin-top: 28px;
+        }
+        h4 { margin-bottom: 6px; }
+        ol, ul {
+            margin-bottom: 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        li:last-child {
+            margin-bottom: 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+            font-size: 0.95rem;
+        }
+        th, td {
+            border: 1px solid #d7dde5;
+            padding: 8px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background: #eef4fb; }
+        pre {
+            background: #f2f5f9;
+            border-radius: 6px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .takeaway {
+            background: #eef4fb;
+            border-left: 4px solid #1a73e8;
+            padding: 10px 14px;
+            border-radius: 4px;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>About This App</h2>
+        <p>The <strong>Retirement Strategy Calculator</strong> models retirement drawdown strategies — Roth conversions, Required Minimum Distributions (RMDs), Social Security timing, and Buy-Borrow-Die — over a full lifetime projection, then stress-tests the winning plan with Monte Carlo simulation. It replaces ad-hoc spreadsheet analysis with a repeatable model that lets you:</p>
+        <ul>
+            <li><strong>Snapshot your accounts</strong> — 401(k), Traditional IRA, Roth IRA, and taxable brokerage.</li>
+            <li><strong>Compare strategies side by side</strong> — a "do nothing" baseline vs. Roth conversion strategies (fixed amount, fill-to-bracket, auto-optimize, smooth income target).</li>
+            <li><strong>Pick the right lever per bucket</strong> — the Strategy Selector decides whether Roth conversion (pre-tax dollars) and/or Buy-Borrow-Die (brokerage dollars) add value, since the two act on disjoint money.</li>
+            <li><strong>Get a concrete action plan</strong> — the Dashboard translates the winning tax-funding strategy into year-by-year steps.</li>
+            <li><strong>Quantify the risk</strong> — the Monte Carlo page runs the chosen plan through thousands of randomized market-return sequences (historical block bootstrap) and reports the probability the plan never runs short, plus a percentile fan chart of assets by age.</li>
+        </ul>
+
+        <h3>Pages</h3>
+        <table>
+            <tr><th>Page</th><th>Purpose</th></tr>
+            <tr><td><strong>Dashboard</strong></td><td>Strategy comparison, winning-strategy charts, and the year-by-year action plan</td></tr>
+            <tr><td><strong>Accounts</strong></td><td>Enter and manage retirement account snapshots</td></tr>
+            <tr><td><strong>Scenarios</strong></td><td>Build scenarios: ages, spending, return assumptions, conversion strategy</td></tr>
+            <tr><td><strong>Monte Carlo</strong></td><td>Success probability, ending-asset percentiles, and the fan chart</td></tr>
+            <tr><td><strong>Login</strong></td><td>Optional sign in to save scenarios and accounts — the app works fully without it</td></tr>
+        </table>
+
+        <div class="takeaway"><strong>⚠️ Disclaimer:</strong> This is a modeling tool, not financial or tax advice. Tax tables currently cover single filers (2026), and projections depend entirely on the assumptions you enter. Consult a qualified professional before acting on any strategy.</div>
+    </div>
+
+    <div class="container">
+        <h2>Running Steps</h2>
+        <ol>
+            <li>In the <strong>Scenario</strong> page, check and modify the values there.</li>
+            <li>Click <strong>"Run Scenario"</strong> and go to the <strong>Dashboard</strong> screen to view your optimized results.</li>
+        </ol>
+    </div>
+
+    <div class="container">
+        <h2>BBD vs Roth Conversion — A Strategy Selection Framework</h2>
+
+        <h3>1. Core Definitions of the Two Strategies</h3>
+        <h4>1. Buy, Borrow, Die (BBD)</h4>
+        <p><strong>Core logic:</strong> Never sell stocks during your lifetime (avoiding capital gains tax entirely); borrow against your securities to fund living expenses; at death, pass the "assets + loan debt" package to your heirs, using the Step-up in Basis rule to wipe out all accumulated capital gains tax.</p>
+        <p><strong>Essence:</strong> Trade high risk (loan interest, forced liquidation in a market crash) for nominal maximization of total assets.</p>
+        <p><strong>Who it fits:</strong> A very small number of ultra-wealthy households. Requires an extremely large brokerage account with a cost basis near zero.</p>
+        <h4>2. Roth Conversion</h4>
+        <p><strong>Core logic:</strong> Proactively convert pre-tax money to Roth during your lifetime, paying the tax now at a known rate, in exchange for decades of fully tax-free growth.</p>
+        <p><strong>Essence:</strong> Trade certainty (locking in today's known tax rate) for long-term stability, defusing future policy risk and the after-death tax bomb.</p>
+        <p><strong>Who it fits:</strong> The vast majority of ordinary and middle-class households — especially those who want to protect a surviving spouse from the "single-filer tax penalty," or spare their children the SECURE Act burden of draining an inherited IRA within 10 years.</p>
+        <div class="takeaway">The first is the wealthy person's "gamble," using leverage risk to maximize assets; the second is the ordinary person's "steady play," paying a known, controllable tax today so descendants inherit fully tax-free with no strings attached.</div>
+
+        <h3>2. The Core Decision Criterion: Which Bucket Holds Your Money?</h3>
+        <ul>
+            <li><strong>Pre-tax (401k/IRA) &gt;&gt; Brokerage</strong> → choose Roth Conversion (the steady play)</li>
+            <li><strong>Brokerage &gt;&gt; Pre-tax</strong> → choose Buy, Borrow, Die (the gamble)
+                <ul>
+                    <li>Prerequisite: the brokerage cost basis is extremely low</li>
+                    <li>Prerequisite: the brokerage is large enough that the SBLOC loan-to-value ratio stays safe</li>
+                </ul>
+            </li>
+            <li><strong>Both buckets roughly equal</strong> → lead with Roth Conversion (steadier, more controllable)</li>
+        </ul>
+
+        <h3>3. Two Concrete Case Studies</h3>
+        <h4>Case A: Mostly Pre-tax (suits Roth Conversion)</h4>
+        <table>
+            <tr><th>Pre-tax (401k/IRA)</th><td>$2,000,000 (67%)</td></tr>
+            <tr><th>Roth</th><td>$500,000</td></tr>
+            <tr><th>Brokerage</th><td>$500,000 (basis $250,000)</td></tr>
+            <tr><th>Total assets</th><td>$3,000,000</td></tr>
+        </table>
+        <p><strong>Why Roth Conversion:</strong></p>
+        <ul>
+            <li>$2M in pre-tax = a ticking tax bomb</li>
+            <li>RMDs at 75 force out ~$80–100k/year (assuming the balance is still $2M at 75; if today's $2M grows at 8% to age 75 with no conversions, the balance is roughly $9M and the first-year RMD exceeds $370k) → pushed into the 32%+ bracket</li>
+            <li>When one spouse dies → the survivor files single → the same RMDs at higher brackets</li>
+            <li>When the children inherit → the SECURE Act 10-year rule forces them to withdraw $200k+ per year, taxed heavily during their peak earning years</li>
+            <li>Roth Conversion solves all of the above at once</li>
+        </ul>
+        <p><strong>Why BBD does not fit:</strong></p>
+        <ul>
+            <li>The brokerage is only $0.5M — too small to run an SBLOC safely</li>
+            <li>The $2M pre-tax cannot be pledged as SBLOC collateral (prohibited by law)</li>
+            <li>Even with borrowing, the $2M pre-tax tax bomb remains — BBD cannot defuse it</li>
+            <li>Unrealized gains are only $250k — the Step-up in Basis saves little</li>
+        </ul>
+        <h4>Case B: Mostly Brokerage (suits Buy, Borrow, Die)</h4>
+        <table>
+            <tr><th>Pre-tax (401k/IRA)</th><td>$500,000 (17%)</td></tr>
+            <tr><th>Roth</th><td>$500,000</td></tr>
+            <tr><th>Brokerage</th><td>$2,000,000 (basis $500,000)</td></tr>
+            <tr><th>Total assets</th><td>$3,000,000</td></tr>
+        </table>
+        <p><strong>Why Buy, Borrow, Die:</strong></p>
+        <ul>
+            <li>The $2M brokerage holds $1.5M of unrealized gains</li>
+            <li>Selling outright: $1.5M × 23.8% (LTCG + NIIT) = ~$357k in capital gains tax</li>
+            <li>BBD strategy: borrow $600–800k via SBLOC (30–40% loan-to-value) to fund living expenses</li>
+            <li>The $2M stays invested and keeps compounding</li>
+            <li>At death, the Step-up in Basis erases all $1.5M+ of gains → $0 capital gains tax</li>
+            <li>Heirs inherit at market value, sell tax-free, and pay off the SBLOC</li>
+            <li>Net tax saved: $357k+</li>
+        </ul>
+        <p><strong>Why Roth Conversion matters less here:</strong></p>
+        <ul>
+            <li>Pre-tax is only $0.5M — RMDs are small and the tax is manageable</li>
+            <li>Converting $0.5M costs ~$110k in tax, saving only $50–80k versus simply paying tax on RMDs</li>
+            <li>And selling brokerage assets to pay the conversion tax triggers additional capital gains tax</li>
+        </ul>
+
+        <h3>4. Decision Matrix</h3>
+        <table>
+            <tr><th>Dimension</th><th>Roth Conversion</th><th>Buy, Borrow, Die</th></tr>
+            <tr><td>Where is the money?</td><td>Mostly pre-tax</td><td>Mostly brokerage</td></tr>
+            <tr><td>Unrealized gains</td><td>Small (irrelevant)</td><td>Huge (drives the strategy)</td></tr>
+            <tr><td>Cost basis</td><td>Doesn't matter</td><td>Very low = Step-up saves a fortune</td></tr>
+            <tr><td>SBLOC collateral</td><td>Brokerage too small = insufficient</td><td>Brokerage large = ample</td></tr>
+            <tr><td>RMD risk</td><td>High (large pre-tax balance)</td><td>Low (small pre-tax balance)</td></tr>
+            <tr><td>SECURE Act inheritance risk</td><td>High (children inherit the pre-tax bomb)</td><td>Low (children inherit stepped-up assets)</td></tr>
+            <tr><td>Risk tolerance required</td><td>Low (tax is known and certain)</td><td>High (leverage, market risk, margin calls)</td></tr>
+            <tr><td>Best suited to</td><td>Middle class and above</td><td>Ultra-high net worth</td></tr>
+        </table>
+
+        <h3>5. The Third Case: Hybrid (Both Buckets Are Large)</h3>
+        <p>Scenario: $2M pre-tax + $2M brokerage (basis $0.5M)</p>
+        <p><strong>Optimal strategy: do both</strong></p>
+        <ol>
+            <li>Use Roth Conversion to clean out the pre-tax bucket (defuse the RMD bomb)</li>
+            <li>Leave the brokerage untouched, reserved for BBD / Step-up in Basis</li>
+            <li>Pay conversion taxes from income or cash — never touch the brokerage (protect the BBD collateral)</li>
+        </ol>
+        <p>Note: this requires enough cash flow to pay the conversion tax without touching either bucket. It is the ultra-wealthy version — feasible only with an independent income stream or cash reserves.</p>
+
+        <h3>6. Bottom Line</h3>
+        <ul>
+            <li>Money mostly in the pre-tax bucket → Roth Conversion (defuse the tax bomb early)</li>
+            <li>Money mostly in the brokerage bucket with a very low basis → Buy, Borrow, Die (let the Step-up erase all gains at death)</li>
+            <li>Both buckets roughly equal → lead with Roth Conversion (steadier, more controllable, independent of markets and interest rates)</li>
+        </ul>
+        <div class="takeaway">The same $3M in total assets calls for completely different strategies depending purely on which buckets hold it. The real question is never "which strategy is better" — it is "where is your money."</div>
+
+        <h3>7. Corrections and Caveats (Important)</h3>
+        <h4>1. The two strategies are not either/or — they act on different buckets</h4>
+        <ul>
+            <li>IRA/401k assets get no Step-up at death (they are IRD — heirs pay full ordinary income tax), so pre-tax money can never use BBD</li>
+            <li>Brokerage money cannot be Roth-converted</li>
+            <li>The real decision is "what to do with each bucket," not "which single path the household takes"</li>
+            <li>Even in Case B, the $0.5M pre-tax should still be converted gradually in low-income years at the 10–12% brackets (small buckets convert cheaply precisely because they are small; the "$110k conversion tax" figure assumed a lump-sum conversion at 22% and overstates the cost)</li>
+        </ul>
+        <h4>2. Case B's "$357k tax savings" is measured against a straw man</h4>
+        <ul>
+            <li>It assumes everything is sold in a single year at the top 23.8% rate</li>
+            <li>The realistic alternative is "sell gradually in low-income retirement years": below roughly $97k of MFJ taxable income the LTCG rate is 0%, and NIIT only applies above $250k MAGI. Harvesting gains year by year might cost $100–200k over a lifetime, or even less</li>
+            <li>BBD's true edge over "selling smartly and slowly" is far thinner — while carrying decades of compounding loan interest, margin-call risk, and the policy risk that the Step-up rule survives unchanged for decades</li>
+        </ul>
+        <h4>3. Balances alone are not enough — the decision rule needs three more variables</h4>
+        <ul>
+            <li>The unrealized-gain fraction g (the lower the cost basis, the more the Step-up is worth)</li>
+            <li>Annual spending ÷ brokerage balance (the smaller the borrowed living expenses relative to collateral, the safer the LTV)</li>
+            <li>Years until death T (BBD is a bet that compounding interest won't outrun the tax saved — the longer T, the bigger the bet. Mathematically BBD is an old person's strategy: workable at 85, dangerous at 60)</li>
+        </ul>
+
+        <h3>8. Mathematical Decision Rules (One Inequality per Bucket)</h3>
+        <h4>Rule 1 — Pre-tax bucket: convert a dollar this year if and only if</h4>
+        <pre>t_now &lt; t_exit
+
+t_now  = the marginal rate paid converting this dollar this year (whichever bracket it fills into)
+t_exit = the rate this dollar will face on the way out if never converted
+       = max(marginal rate in the RMD years, the surviving spouse's single-filer rate, the heirs' rate during the 10-year window)</pre>
+        <p>Judged dollar by dollar → the answer is always "convert up to the bracket where t_now catches up with t_exit," never all-or-nothing. (Paying the conversion tax from a taxable account adds a bonus: it moves tax-dragged money into a tax-free shell, worth roughly 1–3 percentage points.)</p>
+        <h4>Rule 2 — Brokerage bucket: hold to death (BBD) instead of selling if and only if</h4>
+        <pre>c × g  &gt;  (r − m) × T + risk premium
+
+c = the LTCG rate actually achievable selling gradually and smartly (0/15%, not 23.8%)
+g = gain fraction (1 − basis/market value)
+r = SBLOC borrow rate, m = expected market return, T = years until death
+
+Plus a hard feasibility constraint (stress test):
+loan balance (with compounding) ≤ λ × (1 − d) × brokerage market value    (e.g. λ = 50% max LTV, d = 40% crash)
+If breached in any year, check whether backstop assets can cure it; if not, BBD is infeasible no matter how good the math looks</pre>
+        <p><strong>Two key points about collateral:</strong> (1) Only the brokerage can appear in the LTV denominator — IRAs/Roths cannot legally be pledged as loan collateral (IRC §408(e): pledging an IRA is treated as a distribution, blowing up the account); (2) but Roth/cash can serve as a <strong>backstop</strong>: if a stress breach occurs and the backstop is large enough to bring the loan back under the LTV cap, a margin call downgrades from "forced liquidation at the bottom" to "an expensive cure paid with tax-free assets" — BBD remains feasible, at the cost of burning your most precious tax-free space to sustain leverage.</p>
+        <h4>Household-level rough comparison (where the "look at the buckets" heuristic comes from)</h4>
+        <pre>Conversion value ≈ P × (t_exit − t_now)          P = pre-tax balance
+BBD value        ≈ B × g × c − rate-spread cost   B = brokerage balance</pre>
+        <p>Balance is only one factor in the product: a $2M brokerage with a high cost basis (g ≈ 0.1) still shouldn't do BBD; a $2M pre-tax balance owned by someone permanently in the 37% bracket (Δt ≈ 0) still shouldn't convert.</p>
+        <h4>Decision Output</h4>
+        <table>
+            <tr><th>Condition</th><th>Verdict</th></tr>
+            <tr><td>Conversion value &gt; 0 and BBD value &gt; 0 and LTV feasible</td><td>Do both</td></tr>
+            <tr><td>Only conversion value &gt; 0</td><td>Roth Conversion</td></tr>
+            <tr><td>Only BBD value &gt; 0 and feasible</td><td>Buy, Borrow, Die</td></tr>
+            <tr><td>Neither holds</td><td>Do neither (spend directly, sell directly)</td></tr>
+        </table>
+        <p>These rules are implemented in the Dashboard's <strong>Strategy Selector</strong> card (code: <code>src/app/core/calculators/strategy-selector.ts</code>), which delivers a live verdict and explanation based on your accounts and Scenario parameters.</p>
+    </div>
+</body>
+</html>

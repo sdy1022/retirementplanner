@@ -30,7 +30,7 @@ import { AccountSnapshot } from './core/models/retirement.models';
           <mat-icon>query_stats</mat-icon>
           Monte Carlo
         </a>
-        <a mat-button href="/runningsteps.html" target="_blank">
+        <a mat-button href="/runningsteps_eng.html" target="_blank">
           <mat-icon>help</mat-icon>
           Help
         </a>
