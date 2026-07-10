@@ -103,7 +103,14 @@ interface TrialOutcome {
 
 // Resolves the concrete plan once (strategy search, spending order) and returns a closure
 // that replays it under a fresh random return sequence per call. Trials share one seeded
-// RNG stream, so a (scenario, seed) pair is fully reproducible.
+// RNG stream (so a (scenario, seed) pair is fully reproducible), but each trial gets its own
+// block-bootstrap sampler — otherwise the sampler's continue/jump state would carry across
+// trial boundaries, making trial N+1 pick up mid-block where trial N left off instead of
+// starting its own independent draw. That would stitch all trials into one long correlated
+// path (verified: ~81% of trial boundaries would silently continue the previous trial's
+// sequence, vs ~1% for truly independent trials), inflating the effective correlation
+// between trials and making the reported percentiles/success-rate less reliable than a
+// sample of `trials` independent runs.
 function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed: number): () => TrialOutcome {
   if (scenario.rothConversionStrategy.mode !== 'smooth-income-target') {
     throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy only.');
@@ -126,9 +133,12 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
   };
 
   const rng = createSeededRng(seed);
-  const sampleReturn = createReturnSampler(rng, scenario.assumedReturnRate);
 
   return () => {
+    // Fresh sampler per trial: draws from the shared rng stream (so the overall sequence
+    // is still deterministic per seed), but resets the block-continuation state so this
+    // trial's return path doesn't pick up mid-block from the previous trial.
+    const sampleReturn = createReturnSampler(rng, scenario.assumedReturnRate);
     const years = simulateConversionStrategy({
       accounts,
       strategy: resolvedStrategy,

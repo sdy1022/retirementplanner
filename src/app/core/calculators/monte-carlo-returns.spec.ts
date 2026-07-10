@@ -72,6 +72,42 @@ describe('monte-carlo-returns', () => {
     expect(continuationRate).toBeLessThan(0.9);
   });
 
+  it('a fresh sampler per trial (sharing one rng) does not carry the block-continuation state across trials', () => {
+    // Regression test for a bug where monte-carlo.ts built one createReturnSampler and reused
+    // its closure across every Monte Carlo trial: the block-bootstrap's continue/jump state
+    // then bled across trial boundaries, stitching thousands of "independent" trials into one
+    // long correlated path (~81% of trial boundaries silently continued the previous trial's
+    // sequence). The fix is to call createReturnSampler fresh inside each trial while still
+    // drawing from the same shared rng — this asserts that pattern actually restores
+    // independence at trial boundaries.
+    const rng = createSeededRng(5);
+    const shift = shiftForGeometricMean(0.07);
+    const round = (v: number) => Math.round(v * 1e8) / 1e8;
+    const indexByValue = new Map(HISTORICAL_SP500_ANNUAL_RETURNS.map((r, i) => [round(r + shift), i]));
+    const yearsPerTrial = 30;
+    const nTrials = 2000;
+
+    let prevLastIndex: number | null = null;
+    let firstContinuesPrevLast = 0;
+    for (let t = 0; t < nTrials; t++) {
+      const sample = createReturnSampler(rng, 0.07); // fresh sampler per trial, shared rng
+      let firstIndex: number | null = null;
+      let lastIndex = -1;
+      for (let y = 0; y < yearsPerTrial; y++) {
+        lastIndex = indexByValue.get(round(sample()))!;
+        if (firstIndex === null) firstIndex = lastIndex;
+      }
+      if (prevLastIndex !== null && firstIndex === (prevLastIndex + 1) % HISTORICAL_SP500_ANNUAL_RETURNS.length) {
+        firstContinuesPrevLast++;
+      }
+      prevLastIndex = lastIndex;
+    }
+
+    // With independent trials this should be close to 1/98 (~1%); the leaked-state bug made
+    // it ~81%. Leave generous headroom above chance to avoid a flaky test.
+    expect(firstContinuesPrevLast / (nTrials - 1)).toBeLessThan(0.1);
+  });
+
   it('anchoring the geometric mean puts the arithmetic mean above the target (volatility drag compensation)', () => {
     const target = 0.07;
     const shift = shiftForGeometricMean(target);
