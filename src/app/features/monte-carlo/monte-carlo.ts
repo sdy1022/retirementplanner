@@ -1,7 +1,9 @@
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../../core/calculators/monte-carlo';
@@ -10,7 +12,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
 
 @Component({
   selector: 'app-monte-carlo',
-  imports: [CurrencyPipe, DecimalPipe, MatButtonModule, MatCardModule, MatProgressSpinnerModule, NgxChartsModule],
+  imports: [CurrencyPipe, DecimalPipe, FormsModule, MatButtonModule, MatCardModule, MatCheckboxModule, MatProgressSpinnerModule, NgxChartsModule],
   template: `
     <section class="mc-intro">
       <mat-card>
@@ -29,6 +31,12 @@ import { LocalStateService } from '../../core/services/local-state.service';
               currently supports smooth-income-target only — switch the strategy on the Scenario page to run it.
             </p>
           } @else {
+            <p class="guardrail-toggle">
+              <mat-checkbox [(ngModel)]="useGuardrail" [disabled]="running()">
+                Model adaptive spending: cut living expenses 10% and pause conversions when running &gt;20% behind
+                the deterministic plan, restore once back within 5%
+              </mat-checkbox>
+            </p>
             <button mat-flat-button color="primary" [disabled]="running()" (click)="run()">
               {{ running() ? 'Running…' : (result() ? 'Re-run Monte Carlo' : 'Run Monte Carlo (' + (trials | number) + ' trials)') }}
             </button>
@@ -46,7 +54,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
     @if (result(); as mc) {
       <section class="mc-summary">
         <mat-card>
-          <mat-card-header><mat-card-title>Outcome Distribution</mat-card-title></mat-card-header>
+          <mat-card-header><mat-card-title>Outcome Distribution {{ resultUsedGuardrail() ? '(adaptive spending on)' : '(fixed plan, no adaptation)' }}</mat-card-title></mat-card-header>
           <mat-card-content>
             <div class="metric"><span>Probability the plan never runs short through age {{ finalAge() }}</span><strong>{{ mc.successProbability * 100 | number: '1.1-1' }}%</strong></div>
             <div class="metric sub"><span>Mean after-tax ending assets</span><strong>{{ mc.meanEndingAssets | currency }}</strong></div>
@@ -81,6 +89,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
     .strategy-note { margin: 0 0 14px; padding: 10px 12px; background: #eef4fb; border-radius: 6px; font-size: 0.92rem; line-height: 1.5; color: #33475b; }
     .mc-loading { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: #5a6b7c; font-size: 0.92rem; }
     .mc-error { background: #fdecea; color: #b71c1c; }
+    .guardrail-toggle { margin: 0 0 14px; font-size: 0.92rem; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
@@ -92,6 +101,9 @@ export class MonteCarlo {
   readonly trials = DEFAULT_MONTE_CARLO_TRIALS;
   readonly scenario = this.state.scenario;
   readonly result = signal<MonteCarloResult | null>(null);
+  readonly resultUsedGuardrail = signal(false);
+  // Plain property (not a signal) — bound via ngModel, read once when the run starts
+  useGuardrail = false;
   readonly running = signal(false);
   readonly progress = signal(0);
   readonly error = signal<string | null>(null);
@@ -133,12 +145,14 @@ export class MonteCarlo {
     this.error.set(null);
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
+    const useGuardrail = this.useGuardrail;
     try {
       const result = await runMonteCarloSmoothIncomeTargetAsync(
-        scenario, accounts, this.trials, Date.now(),
+        scenario, accounts, this.trials, Date.now(), useGuardrail,
         (done) => this.progress.set(done),
       );
       this.result.set(result);
+      this.resultUsedGuardrail.set(useGuardrail);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Monte Carlo simulation failed.');
     } finally {

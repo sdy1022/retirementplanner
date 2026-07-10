@@ -1,7 +1,8 @@
 import { AccountSnapshot, Scenario, YearResult } from '../models/retirement.models';
-import { simulateConversionStrategy } from './roth-conversion-calculator';
+import { simulateConversionStrategy, sumAccounts } from './roth-conversion-calculator';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from './scenario-engine';
 import { createReturnSampler, createSeededRng } from './monte-carlo-returns';
+import { createGuardrail, GuardrailOptions } from './spending-guardrail';
 
 // 5,000 trials pins the success probability to roughly ±1% while keeping a full run to a
 // few seconds; the async runner below chunks the work so the UI never freezes regardless.
@@ -57,8 +58,9 @@ export function runMonteCarloSmoothIncomeTarget(
   accounts: AccountSnapshot[],
   trials = DEFAULT_MONTE_CARLO_TRIALS,
   seed = Date.now(),
+  useGuardrail = false,
 ): MonteCarloResult {
-  const runTrial = createTrialRunner(scenario, accounts, seed);
+  const runTrial = createTrialRunner(scenario, accounts, seed, useGuardrail);
   const endingAssets: number[] = new Array(trials);
   const assetsPerTrial: number[][] = new Array(trials);
   const ages: number[] = [];
@@ -80,9 +82,10 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
   accounts: AccountSnapshot[],
   trials = DEFAULT_MONTE_CARLO_TRIALS,
   seed = Date.now(),
+  useGuardrail = false,
   onProgress?: (completedTrials: number) => void,
 ): Promise<MonteCarloResult> {
-  const runTrial = createTrialRunner(scenario, accounts, seed);
+  const runTrial = createTrialRunner(scenario, accounts, seed, useGuardrail);
   const endingAssets: number[] = new Array(trials);
   const assetsPerTrial: number[][] = new Array(trials);
   const ages: number[] = [];
@@ -121,7 +124,7 @@ interface TrialOutcome {
 // sequence, vs ~1% for truly independent trials), inflating the effective correlation
 // between trials and making the reported percentiles/success-rate less reliable than a
 // sample of `trials` independent runs.
-function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed: number): () => TrialOutcome {
+function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed: number, useGuardrail: boolean, guardrailOptions?: GuardrailOptions): () => TrialOutcome {
   if (scenario.rothConversionStrategy.mode !== 'smooth-income-target') {
     throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy only.');
   }
@@ -134,6 +137,18 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
   const spendingOrder = base.resolvedSpendingOrder ?? scenario.spendingOrder;
   const allowPreRetirementConversions = base.resolvedAllowPreRetirementConversions ?? scenario.allowPreRetirementConversions;
 
+  // Reference plan for the guardrail: the deterministic (flat-return) balances, reindexed
+  // from "ending assets at age A" to "beginning-of-year assets at age A+1" so it lines up
+  // with the beginningAssets a trial reports for that same age.
+  const beginningAssetsBaselineByAge = new Map<number, number>();
+  if (useGuardrail) {
+    beginningAssetsBaselineByAge.set(
+      Math.floor(scenario.currentAge),
+      sumAccounts(accounts, ['traditional_401k', 'traditional_ira', 'roth_401k', 'roth_ira', 'brokerage']),
+    );
+    for (const year of base.years) beginningAssetsBaselineByAge.set(year.age + 1, year.endingAssets);
+  }
+
   const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
   const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
   // Applied to every year (not just the last) so the fan chart and the final-year summary
@@ -145,8 +160,11 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
   return () => {
     // Fresh sampler per trial: draws from the shared rng stream (so the overall sequence
     // is still deterministic per seed), but resets the block-continuation state so this
-    // trial's return path doesn't pick up mid-block from the previous trial.
+    // trial's return path doesn't pick up mid-block from the previous trial. The guardrail
+    // needs the same treatment — a fresh instance per trial so "currently in cut mode"
+    // doesn't leak across trial boundaries either.
     const sampleReturn = createReturnSampler(rng, scenario.assumedReturnRate);
+    const guardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
     const years = simulateConversionStrategy({
       accounts,
       strategy: resolvedStrategy,
@@ -156,6 +174,7 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       filingStatus: scenario.filingStatus,
       assumedReturnRate: scenario.assumedReturnRate,
       returnRateForYear: sampleReturn,
+      guardrail,
       stateTaxRate: scenario.stateTaxRate,
       wageIncome: scenario.wageIncome,
       annualOtherIncome: scenario.annualOtherIncome,

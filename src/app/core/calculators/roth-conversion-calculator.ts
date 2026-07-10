@@ -29,6 +29,12 @@ export interface ConversionSimulationInput {
   spendingOrder?: SpendingOrder;
   dividendYield?: number;
   sblocTaxFunding?: SblocTaxFunding;
+  // Optional dynamic-spending guardrail, called at the start of each year with the assets
+  // carried into that year. Lets a simulation model a retiree who trims discretionary
+  // spending and pauses discretionary conversions when running behind a reference plan,
+  // instead of blindly executing a fixed plan through every market regime. Absent means the
+  // existing behavior: full living expenses, conversions never paused by this mechanism.
+  guardrail?: (params: { age: number; beginningAssets: number }) => { livingExpenseMultiplier: number; pauseConversion: boolean };
 }
 
 // Loan draws stop once the SBLOC reaches this fraction of the brokerage collateral
@@ -67,6 +73,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
 
   for (let age = startAge; age <= lastAge; age++) {
     const isRetired = input.retirementAge ? age >= input.retirementAge : true;
+    // Assets carried into this year, before this year's flows/growth — what the guardrail
+    // judges "behind schedule" against
+    const beginningAssets = traditionalBalance + rothBalance + brokerageBalance;
+    const guardrailDecision = input.guardrail?.({ age, beginningAssets }) ?? { livingExpenseMultiplier: 1, pauseConversion: false };
     // Wages grow by a flat dollar raise each working year
     const currentWage = isRetired ? 0 : Math.max(0, (input.wageIncome ?? 0) + (input.annualWageGrowth ?? 0) * (age - startAge));
     const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
@@ -88,7 +98,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // conversion decision and consume bracket room that would otherwise go to conversions.
     const expenseBaseAge = Math.floor(input.retirementAge ?? input.currentAge);
     const livingExpenses = isRetired
-      ? roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, age - expenseBaseAge))
+      ? roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, age - expenseBaseAge) * guardrailDecision.livingExpenseMultiplier)
       : 0;
     // RMD cash pays expenses first (after SS); only the unspent remainder is deposited to brokerage
     const rmdSpentOnExpenses = Math.min(rmd, Math.max(0, livingExpenses - ssIncome));
@@ -111,7 +121,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // allowPreRetirementConversions, working years use whatever room remains above wages.
     // A preserve floor keeps part of the traditional balance unconverted so later years
     // can drain it through the low brackets instead of paying conversion-rate tax now.
-    const canConvert = isRetired || (input.allowPreRetirementConversions ?? false);
+    const canConvert = (isRetired || (input.allowPreRetirementConversions ?? false)) && !guardrailDecision.pauseConversion;
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
     const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, input.filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
