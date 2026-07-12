@@ -87,6 +87,15 @@ import { AuthService } from './core/services/auth.service';
         padding: 16px;
       }
     }
+    @media print {
+      .shell-toolbar {
+        display: none !important;
+      }
+      main {
+        padding: 0;
+        background: white;
+      }
+    }
   `
 })
 export class App {

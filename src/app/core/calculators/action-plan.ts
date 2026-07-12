@@ -4,7 +4,10 @@ import { BRACKET_INFLATION_RATE, getTaxTable } from './tax-tables';
 
 export interface ActionStep {
   age: number;
-  message: string;
+  action: string;
+  marginalBracket: string;
+  totalTax: string;
+  fundingSource: string;
   status: 'info' | 'success' | 'warning' | 'danger';
 }
 
@@ -12,118 +15,102 @@ export interface ActionStep {
 function fundingBreakdown(year: YearResult): string {
   const money = (v: number) => `$${Math.round(v).toLocaleString()}`;
   const expenseParts = [
-    year.expensesFromSs > 0 ? `Social Security ${money(year.expensesFromSs)}` : '',
+    year.expensesFromSs > 0 ? `SS ${money(year.expensesFromSs)}` : '',
     year.expensesFromRmd > 0 ? `RMD ${money(year.expensesFromRmd)}` : '',
-    year.expensesFromTraditional > 0 ? `Traditional ${money(year.expensesFromTraditional)}` : '',
-    year.expensesFromBrokerage > 0 ? `brokerage ${money(year.expensesFromBrokerage)}` : '',
+    year.expensesFromTraditional > 0 ? `Trad ${money(year.expensesFromTraditional)}` : '',
+    year.expensesFromBrokerage > 0 ? `Brok ${money(year.expensesFromBrokerage)}` : '',
     year.expensesFromRoth > 0 ? `Roth ${money(year.expensesFromRoth)}` : '',
   ].filter(Boolean);
   const taxParts = [
     (year.taxFromSbloc ?? 0) > 0 ? `SBLOC loan ${money(year.taxFromSbloc!)}` : '',
-    year.taxFromBrokerage > 0 ? `brokerage ${money(year.taxFromBrokerage)}` : '',
-    year.taxWithheldFromConversion > 0 ? `withheld from conversion ${money(year.taxWithheldFromConversion)}` : '',
-    year.taxFromTraditional > 0 ? `Traditional ${money(year.taxFromTraditional)}` : '',
+    year.taxFromBrokerage > 0 ? `Brok ${money(year.taxFromBrokerage)}` : '',
+    year.taxWithheldFromConversion > 0 ? `Withheld ${money(year.taxWithheldFromConversion)}` : '',
+    year.taxFromTraditional > 0 ? `Trad ${money(year.taxFromTraditional)}` : '',
     year.taxFromRoth > 0 ? `Roth ${money(year.taxFromRoth)}` : '',
   ].filter(Boolean);
-  let msg = '';
-  if (expenseParts.length > 0) msg += ` Expenses paid from: ${expenseParts.join(', ')}.`;
-  if (taxParts.length > 0) msg += ` Taxes paid from: ${taxParts.join(', ')}.`;
-  return msg;
+  const msgs = [];
+  if (expenseParts.length > 0) msgs.push(`Exp: ${expenseParts.join(', ')}`);
+  if (taxParts.length > 0) msgs.push(`Tax: ${taxParts.join(', ')}`);
+  return msgs.join(' | ');
 }
 
 export function generateActionPlan(result: ScenarioResult, filingStatus: FilingStatus, taxYear: number = 2026): ActionStep[] {
   const steps: ActionStep[] = [];
   const startAge = result.years[0]?.age ?? 0;
-  const firstRmdAge = result.years.find(y => y.rmd > 0)?.age;
 
   for (const year of result.years) {
-    // Match the engine's per-year bracket indexing so reported rates agree with the simulation
     const inflationFactor = Math.pow(1 + BRACKET_INFLATION_RATE, year.age - startAge);
     const table = getTaxTable(taxYear, filingStatus, inflationFactor);
-    const bracketMsg = ` Current bracket: ${Math.round(year.marginalRate * 100)}%.`;
-    if (year.conversion > 0) {
-      // Compute effective federal rate on conversion only (marginal blend)
+    
+    let actionStr = '';
+    const marginalBracketStr = `${Math.round(year.marginalRate * 100)}%`;
+    let totalTaxStr = year.totalTax > 0 ? `$${Math.round(year.totalTax).toLocaleString()}` : '$0';
+    if (year.irmaa > 0) {
+      totalTaxStr += ` (+ $${Math.round(year.irmaa).toLocaleString()} IRMAA)`;
+    }
+    
+    const fundingSourceStr = fundingBreakdown(year);
+    let status: ActionStep['status'] = 'info';
+
+    if (year.shortfall > 0) {
+      status = 'danger';
+      actionStr = `⚠ Underfunded: $${Math.round(year.shortfall).toLocaleString()} could not be covered.`;
+    } else if (year.conversion > 0) {
+      // Conversion year
       const baseGross = year.taxableIncome - year.conversion;
       const taxWithout = calculateTax(baseGross, filingStatus, taxYear, inflationFactor);
       const taxWith = calculateTax(year.taxableIncome, filingStatus, taxYear, inflationFactor);
       const conversionTax = taxWith - taxWithout;
       const effectiveRate = year.conversion > 0 ? conversionTax / year.conversion : 0;
-
-      // Determine which brackets the conversion spans
+      
       const baseTaxable = Math.max(0, baseGross - table.standardDeduction);
       const endTaxable = Math.max(0, year.taxableIncome - table.standardDeduction);
       const startBracket = table.brackets.find(b => baseTaxable >= b.min && baseTaxable <= b.max);
       const endBracket = table.brackets.find(b => endTaxable >= b.min && endTaxable <= b.max);
-
+      
       const startRate = Math.round((startBracket?.rate ?? 0) * 100);
       const endRate = Math.round((endBracket?.rate ?? 0) * 100);
       const effectivePct = Math.round(effectiveRate * 100);
-
-      let msg = `Convert $${year.conversion.toLocaleString()} to Roth`;
+      
+      actionStr = `Convert $${Math.round(year.conversion).toLocaleString()} to Roth`;
       if (startRate === endRate) {
-        msg += ` (entirely within ${endRate}% bracket, effective rate ${effectivePct}%).`;
+        actionStr += ` (within ${endRate}%, effective ${effectivePct}%)`;
       } else {
-        msg += ` (spans ${startRate}%–${endRate}% brackets, effective rate ${effectivePct}%).`;
+        actionStr += ` (spans ${startRate}%–${endRate}%, effective ${effectivePct}%)`;
       }
-
-      // Check if we're near the bracket ceiling
+      
       const grossBracketCeiling = (endBracket?.max ?? Infinity) + table.standardDeduction;
       const amountToTop = grossBracketCeiling - year.taxableIncome;
       if (amountToTop < 1000 && (endBracket?.rate ?? 0) > 0.12) {
-        msg += ` Fills to top of ${endRate}%.`;
+        actionStr += ` (Fills ${endRate}%)`;
       }
-
-      if (year.totalTax > 0) {
-        msg += ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.`;
-      }
-      if (year.irmaa > 0) {
-        msg += ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.`;
-      }
-      if (year.livingExpenses > 0) {
-        msg += ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.`;
-      }
-      msg += fundingBreakdown(year);
-      msg += bracketMsg;
-
-      steps.push({ age: year.age, message: msg, status: 'info' });
-    }
-
-    if (year.rmd > 0) {
+    } else if (year.rmd > 0) {
+      // RMD year
       const rmdSpill = year.marginalRate >= 0.32;
-      // The conversion line above already carries the breakdown for conversion years
-      const fundingMsg = year.conversion > 0 ? '' : fundingBreakdown(year);
-      const expenseMsg = (year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '') + fundingMsg;
-      const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
-      const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
+      actionStr = `RMD of $${Math.round(year.rmd).toLocaleString()}`;
       if (rmdSpill) {
-        steps.push({
-          age: year.age,
-          message: `⚠ RMD of $${year.rmd.toLocaleString()} pushes you into the ${Math.round(year.marginalRate * 100)}% bracket! Consider increasing earlier conversions.` + expenseMsg + taxMsg + irmaaMsg,
-          status: 'warning'
-        });
+        status = 'warning';
+        actionStr = `⚠ RMD pushes to ${Math.round(year.marginalRate * 100)}% bracket!`;
       } else {
-        steps.push({
-          age: year.age,
-          message: `✓ RMD of $${year.rmd.toLocaleString()} stays within the ${Math.round(year.marginalRate * 100)}% band.` + expenseMsg + taxMsg + irmaaMsg,
-          status: 'success'
-        });
+        status = 'success';
       }
-    } else if (year.conversion === 0 && (year.livingExpenses > 0 || year.age >= 60)) {
-      const expenseMsg = (year.livingExpenses > 0 ? ` Funded $${year.livingExpenses.toLocaleString()} in living expenses.` : '') + fundingBreakdown(year);
-      const taxMsg = year.totalTax > 0 ? ` Total tax (fed+state) ≈ $${year.totalTax.toLocaleString()}.` : '';
-      const irmaaMsg = year.irmaa > 0 ? ` Medicare IRMAA Surcharge: $${year.irmaa.toLocaleString()}.` : '';
-      steps.push({
-        age: year.age,
-        message: `No conversion or RMD required this year.` + expenseMsg + taxMsg + irmaaMsg + bracketMsg,
-        status: 'info'
-      });
+    } else if (year.livingExpenses > 0 || year.age >= 60) {
+      actionStr = `No conversion/RMD.`;
+      if (year.livingExpenses > 0) {
+        actionStr += ` Funded $${Math.round(year.livingExpenses).toLocaleString()} living expenses.`;
+      }
+    } else {
+      continue;
     }
 
-    if (year.shortfall > 0) {
+    if (actionStr) {
       steps.push({
         age: year.age,
-        message: `⚠ Underfunded: $${year.shortfall.toLocaleString()} of expenses/taxes could not be covered by any account this year. The plan is not feasible as modeled.`,
-        status: 'danger'
+        action: actionStr,
+        marginalBracket: marginalBracketStr,
+        totalTax: totalTaxStr,
+        fundingSource: fundingSourceStr,
+        status
       });
     }
   }

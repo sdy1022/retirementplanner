@@ -91,6 +91,9 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
     .actions { display: flex; gap: 12px; padding-top: 16px; flex-wrap: wrap; }
     button { justify-self: start; min-width: 160px; }
     @media (max-width: 780px) { .form-grid { grid-template-columns: 1fr; } }
+    @media print {
+      :host { display: none !important; }
+    }
   `,
 })
 export class ScenarioBuilder {

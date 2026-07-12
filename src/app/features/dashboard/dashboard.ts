@@ -31,6 +31,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <span class="export-group">
             <button mat-button (click)="exportYearByYearCsv()" id="export-csv-btn">📥 Year-by-Year CSV</button>
             <button mat-button (click)="exportScenarioJson()" id="export-json-btn">📥 Scenario JSON</button>
+            <button mat-button (click)="printReport()" id="print-report-btn">🖨️ Print PDF</button>
           </span>
         </mat-card-content>
       </mat-card>
@@ -137,13 +138,30 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
-          <ul class="action-list">
-            @for (step of actionPlan(); track step.age) {
-              <li [class]="'status-' + step.status">
-                <strong>Age {{ step.age }}:</strong> {{ step.message }}
-              </li>
-            }
-          </ul>
+          <div class="table-responsive">
+            <table class="action-table">
+              <thead>
+                <tr>
+                  <th>Age</th>
+                  <th>Action</th>
+                  <th>Marginal Bracket</th>
+                  <th>Total Tax</th>
+                  <th>Funding Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (step of actionPlan(); track step.age) {
+                  <tr [class]="'status-' + step.status">
+                    <td><strong>{{ step.age }}</strong></td>
+                    <td>{{ step.action }}</td>
+                    <td>{{ step.marginalBracket }}</td>
+                    <td>{{ step.totalTax }}</td>
+                    <td>{{ step.fundingSource }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
         </mat-card-content>
       </mat-card>
     </section>
@@ -172,11 +190,17 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
     .strategy-selector, .advice, .action-plan { margin-bottom: 20px; }
     .verdict { margin: 0 0 12px; font-size: 1.15rem; font-weight: 600; }
-    .advice-list, .action-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
-    .advice-list li, .action-list li { margin-bottom: 8px; }
-    .action-list li.status-warning { color: #d32f2f; }
-    .action-list li.status-danger { color: #b71c1c; font-weight: 600; }
-    .action-list li.status-success { color: #2e7d32; }
+    .advice-list { padding-left: 20px; line-height: 1.6; font-size: 1.05rem; }
+    .advice-list li { margin-bottom: 8px; }
+    
+    .table-responsive { overflow-x: auto; margin-top: 10px; }
+    .action-table { width: 100%; border-collapse: collapse; font-size: 1rem; text-align: left; }
+    .action-table th, .action-table td { padding: 12px 14px; border-bottom: 1px solid #edf1f5; vertical-align: top; }
+    .action-table th { background: #f8fafc; font-weight: 600; color: #5a6b7c; white-space: nowrap; border-bottom: 2px solid #d7dde5; }
+    .action-table tr.status-warning { background-color: #fff5f5; color: #d32f2f; }
+    .action-table tr.status-danger { background-color: #ffebee; color: #b71c1c; font-weight: 600; }
+    .action-table tr.status-success { background-color: #edf7ed; color: #2e7d32; }
+
     .strategy-note { margin: 12px 0 0; padding: 10px 12px; background: #eef4fb; border-radius: 6px; font-size: 0.92rem; line-height: 1.5; color: #33475b; }
     .metric { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #edf1f5; }
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
@@ -186,6 +210,22 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .export-group button { font-size: 0.85rem; text-transform: none; }
     mat-card-content { min-height: 280px; }
     @media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
+    @media print {
+      .export-group { display: none !important; }
+      mat-card { box-shadow: none !important; border: 1px solid #ddd; margin-bottom: 24px; page-break-inside: avoid; }
+      .summary, .strategy-selector, .advice, .action-plan, .charts { display: block; }
+      
+      /* Make Action Plan read-friendly */
+      .action-plan { page-break-before: always; }
+      .action-table { page-break-inside: auto; }
+      .action-table tr { page-break-inside: avoid; page-break-after: auto; }
+      .action-table th { background: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .action-table tr.status-warning td { background-color: #fff5f5 !important; }
+      .action-table tr.status-danger td { background-color: #ffebee !important; }
+      .action-table tr.status-success td { background-color: #edf7ed !important; }
+      
+      .charts { page-break-before: always; }
+    }
   `,
 })
 export class Dashboard {
@@ -490,5 +530,10 @@ export class Dashboard {
 
     const json = JSON.stringify(payload, null, 2);
     downloadFile(exportFilename(scenario.name, 'json'), json, 'application/json');
+  }
+
+  /** Trigger browser native print to generate PDF */
+  printReport(): void {
+    window.print();
   }
 }
