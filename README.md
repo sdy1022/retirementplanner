@@ -1,18 +1,18 @@
 # Retirement Strategy Calculator
 
-A client-side personal finance tool built with Angular and Supabase that models retirement drawdown strategies — Roth conversions, Required Minimum Distributions (RMDs), Social Security timing, and Buy-Borrow-Die — over a full lifetime projection, then stress-tests the winning plan with Monte Carlo simulation.
+A client-side personal finance tool built with Angular and Supabase that models retirement drawdown strategies â€” Roth conversions, Required Minimum Distributions (RMDs), Social Security timing, and Buy-Borrow-Die â€” over a full lifetime projection, then stress-tests the winning plan with Monte Carlo simulation.
 
-## 🎯 What It Does
+## ðŸŽ¯ What It Does
 
 This tool replaces ad-hoc spreadsheet analysis with a repeatable, testable model that lets you:
 
-- **Snapshot your accounts** — 401(k), Traditional IRA, Roth IRA, and taxable brokerage.
-- **Compare strategies side by side** — a "do nothing" baseline vs. Roth conversion strategies (fixed amount, fill-to-bracket, auto-optimize, smooth income target).
-- **Pick the right lever per bucket** — the strategy selector decides whether Roth conversion (pre-tax dollars) and/or Buy-Borrow-Die (brokerage dollars) add value, since the two act on disjoint money.
-- **Get a concrete action plan** — the dashboard translates the winning tax-funding strategy into year-by-year steps.
-- **Quantify the risk** — a Monte Carlo page runs the chosen plan through thousands of randomized market-return sequences (historical block bootstrap) and reports the probability the plan never runs short, plus a percentile fan chart of assets by age.
+- **Snapshot your accounts** â€” 401(k), Traditional IRA, Roth IRA, and taxable brokerage.
+- **Compare strategies side by side** â€” a "do nothing" baseline vs. Roth conversion strategies (fixed amount, fill-to-bracket, auto-optimize, smooth income target).
+- **Pick the right lever per bucket** â€” the strategy selector decides whether Roth conversion (pre-tax dollars) and/or Buy-Borrow-Die (brokerage dollars) add value, since the two act on disjoint money.
+- **Get a concrete action plan** â€” the dashboard translates the winning tax-funding strategy into year-by-year steps.
+- **Quantify the risk** â€” a Monte Carlo page runs the chosen plan through thousands of randomized market-return sequences (historical block bootstrap) and reports the probability the plan never runs short, plus a percentile fan chart of assets by age.
 
-## 📱 Pages
+## ðŸ“± Pages
 
 | Route | Purpose |
 |---|---|
@@ -20,17 +20,17 @@ This tool replaces ad-hoc spreadsheet analysis with a repeatable, testable model
 | `/accounts` | Enter and manage retirement account snapshots |
 | `/scenarios` | Build scenarios: ages, spending, return assumptions, conversion strategy |
 | `/monte-carlo` | Success probability, ending-asset percentiles, and the fan chart |
-| `/login` | Supabase-backed sign in (optional — the app works without it) |
+| `/login` | Supabase-backed sign in (optional â€” the app works without it) |
 
-## 🚀 Tech Stack
+## ðŸš€ Tech Stack
 
 - **Frontend**: Angular 20 (standalone components, signals, no NgModules)
 - **UI**: Angular Material + ngx-charts for visualization
 - **Persistence (optional)**: Supabase (PostgreSQL + Auth) for saving scenarios and accounts
 - **Hosting target**: Vercel (SPA mode)
-- **Computation**: pure, framework-free TypeScript — the entire engine runs in the browser with no server round-trips
+- **Computation**: pure, framework-free TypeScript â€” the entire engine runs in the browser with no server round-trips
 
-## 🧮 Calculation Engine
+## ðŸ§® Calculation Engine
 
 The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tested functions:
 
@@ -46,7 +46,7 @@ The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tes
 | `social-security-calculator.ts` | Claiming-age comparison (62/67/70) with lifetime present value and breakeven age |
 | `monte-carlo.ts` / `monte-carlo-returns.ts` | 5,000-trial simulation using a geometric-mean-anchored stationary block bootstrap of historical returns; chunked so the UI never freezes |
 
-## 🛠️ Local Setup
+## ðŸ› ï¸ Local Setup
 
 1. **Install dependencies**
    ```bash
@@ -58,13 +58,13 @@ The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tes
    ```bash
    npm start
    ```
-   Open `http://localhost:4200/`. **Supabase is optional** — without credentials the app runs entirely on in-memory state (`local-state.service.ts`) with seeded defaults; only saving/loading scenarios and login are disabled.
+   Open `http://localhost:4200/`. **Supabase is optional** â€” without credentials the app runs entirely on in-memory state (`local-state.service.ts`) with seeded defaults; only saving/loading scenarios and login are disabled.
 
 3. **(Optional) Configure Supabase persistence**
    - Create a project at [Supabase](https://supabase.com).
    - Run `supabase/migrations/0001_init.sql` in the Supabase SQL Editor to provision tables and Row Level Security policies.
    - For local dev, fill `supabaseUrl` / `supabaseAnonKey` in `src/environments/environment.ts`.
-   - For production, set the `SUPABASE_URL` / `SUPABASE_ANON_KEY` environment variables (e.g. in Vercel) — the build runs `set-env.js`, which generates `environment.production.ts` automatically. **Never hand-edit `environment.production.ts`**; it is overwritten on every build.
+   - For production, set the `SUPABASE_URL` / `SUPABASE_ANON_KEY` environment variables (e.g. in Vercel) â€” the build runs `set-env.js`, which generates `environment.production.ts` automatically. **Never hand-edit `environment.production.ts`**; it is overwritten on every build.
 
 4. **Run unit tests**
    ```bash
@@ -78,106 +78,106 @@ The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tes
    ```
    Artifacts are written to `dist/`.
 
-## 📌 Future Scope
+## ðŸ“Œ Future Scope
 
 - IRMAA MAGI threshold detection and Medicare Part B/D surcharge modeling.
 - Social Security benefit taxability rules (up to 85% taxable via provisional income).
 - Married-filing-jointly support (tax tables currently cover single filers, 2026).
 - Persisting Monte Carlo results and historical calculation snapshots.
 
-## ⚠️ Disclaimer
+## âš ï¸ Disclaimer
 
 This is a modeling tool, not financial or tax advice. Tax tables cover a single filing status and year, and projections depend entirely on the assumptions you enter. Consult a qualified professional before acting on any strategy.
 
 ---
 
-# 退休策略计算器 (Retirement Strategy Calculator)
+# é€€ä¼‘ç­–ç•¥è®¡ç®—å™¨ (Retirement Strategy Calculator)
 
-一个基于 Angular 和 Supabase 构建的纯客户端个人理财工具，用于在整个人生跨度内模拟退休提款策略 —— Roth 转换、法定最低取款额 (RMD)、社会安全金领取时机、以及 Buy-Borrow-Die 策略，并通过蒙特卡洛模拟对最优方案进行压力测试。
+ä¸€ä¸ªåŸºäºŽ Angular å’Œ Supabase æž„å»ºçš„çº¯å®¢æˆ·ç«¯ä¸ªäººç†è´¢å·¥å…·ï¼Œç”¨äºŽåœ¨æ•´ä¸ªäººç”Ÿè·¨åº¦å†…æ¨¡æ‹Ÿé€€ä¼‘ææ¬¾ç­–ç•¥ â€”â€” Roth è½¬æ¢ã€æ³•å®šæœ€ä½Žå–æ¬¾é¢ (RMD)ã€ç¤¾ä¼šå®‰å…¨é‡‘é¢†å–æ—¶æœºã€ä»¥åŠ Buy-Borrow-Die ç­–ç•¥ï¼Œå¹¶é€šè¿‡è’™ç‰¹å¡æ´›æ¨¡æ‹Ÿå¯¹æœ€ä¼˜æ–¹æ¡ˆè¿›è¡ŒåŽ‹åŠ›æµ‹è¯•ã€‚
 
-## 🎯 功能概述
+## ðŸŽ¯ åŠŸèƒ½æ¦‚è¿°
 
-该工具旨在替代零散的电子表格分析，提供一个可复用、可测试的模型，使你能够：
+è¯¥å·¥å…·æ—¨åœ¨æ›¿ä»£é›¶æ•£çš„ç”µå­è¡¨æ ¼åˆ†æžï¼Œæä¾›ä¸€ä¸ªå¯å¤ç”¨ã€å¯æµ‹è¯•çš„æ¨¡åž‹ï¼Œä½¿ä½ èƒ½å¤Ÿï¼š
 
-- **录入账户快照** —— 401(k)、传统 IRA、Roth IRA 以及应税证券账户。
-- **多策略对比** —— 将"不做任何操作"的基线情景与各类 Roth 转换策略（固定金额、填满税率区间、自动优化、平滑收入目标）并排比较。
-- **按资产类别选择策略** —— 策略选择器分别判断 Roth 转换（针对税前资金）和 Buy-Borrow-Die（针对证券账户资金）是否各自创造价值，因为两者作用于互不重叠的资金。
-- **生成具体行动计划** —— 仪表盘将胜出的税务筹资策略转化为逐年执行步骤。
-- **量化风险** —— 蒙特卡洛页面将选定方案放入数千条随机市场收益序列（历史区块自助抽样）中运行，报告"资金终身不枯竭"的成功概率，并绘制按年龄分布的资产百分位扇形图。
+- **å½•å…¥è´¦æˆ·å¿«ç…§** â€”â€” 401(k)ã€ä¼ ç»Ÿ IRAã€Roth IRA ä»¥åŠåº”ç¨Žè¯åˆ¸è´¦æˆ·ã€‚
+- **å¤šç­–ç•¥å¯¹æ¯”** â€”â€” å°†"ä¸åšä»»ä½•æ“ä½œ"çš„åŸºçº¿æƒ…æ™¯ä¸Žå„ç±» Roth è½¬æ¢ç­–ç•¥ï¼ˆå›ºå®šé‡‘é¢ã€å¡«æ»¡ç¨ŽçŽ‡åŒºé—´ã€è‡ªåŠ¨ä¼˜åŒ–ã€å¹³æ»‘æ”¶å…¥ç›®æ ‡ï¼‰å¹¶æŽ’æ¯”è¾ƒã€‚
+- **æŒ‰èµ„äº§ç±»åˆ«é€‰æ‹©ç­–ç•¥** â€”â€” ç­–ç•¥é€‰æ‹©å™¨åˆ†åˆ«åˆ¤æ–­ Roth è½¬æ¢ï¼ˆé’ˆå¯¹ç¨Žå‰èµ„é‡‘ï¼‰å’Œ Buy-Borrow-Dieï¼ˆé’ˆå¯¹è¯åˆ¸è´¦æˆ·èµ„é‡‘ï¼‰æ˜¯å¦å„è‡ªåˆ›é€ ä»·å€¼ï¼Œå› ä¸ºä¸¤è€…ä½œç”¨äºŽäº’ä¸é‡å çš„èµ„é‡‘ã€‚
+- **ç”Ÿæˆå…·ä½“è¡ŒåŠ¨è®¡åˆ’** â€”â€” ä»ªè¡¨ç›˜å°†èƒœå‡ºçš„ç¨ŽåŠ¡ç­¹èµ„ç­–ç•¥è½¬åŒ–ä¸ºé€å¹´æ‰§è¡Œæ­¥éª¤ã€‚
+- **é‡åŒ–é£Žé™©** â€”â€” è’™ç‰¹å¡æ´›é¡µé¢å°†é€‰å®šæ–¹æ¡ˆæ”¾å…¥æ•°åƒæ¡éšæœºå¸‚åœºæ”¶ç›Šåºåˆ—ï¼ˆåŽ†å²åŒºå—è‡ªåŠ©æŠ½æ ·ï¼‰ä¸­è¿è¡Œï¼ŒæŠ¥å‘Š"èµ„é‡‘ç»ˆèº«ä¸æž¯ç«­"çš„æˆåŠŸæ¦‚çŽ‡ï¼Œå¹¶ç»˜åˆ¶æŒ‰å¹´é¾„åˆ†å¸ƒçš„èµ„äº§ç™¾åˆ†ä½æ‰‡å½¢å›¾ã€‚
 
-## 📱 页面导航
+## ðŸ“± é¡µé¢å¯¼èˆª
 
-| 路由 | 用途 |
+| è·¯ç”± | ç”¨é€” |
 |---|---|
-| `/dashboard` | 策略对比、胜出策略图表、逐年行动计划 |
-| `/accounts` | 录入和管理退休账户快照 |
-| `/scenarios` | 构建情景：年龄、支出、收益率假设、转换策略 |
-| `/monte-carlo` | 成功概率、期末资产百分位、扇形图 |
-| `/login` | 基于 Supabase 的登录（可选 —— 不登录也可完整使用） |
+| `/dashboard` | ç­–ç•¥å¯¹æ¯”ã€èƒœå‡ºç­–ç•¥å›¾è¡¨ã€é€å¹´è¡ŒåŠ¨è®¡åˆ’ |
+| `/accounts` | å½•å…¥å’Œç®¡ç†é€€ä¼‘è´¦æˆ·å¿«ç…§ |
+| `/scenarios` | æž„å»ºæƒ…æ™¯ï¼šå¹´é¾„ã€æ”¯å‡ºã€æ”¶ç›ŠçŽ‡å‡è®¾ã€è½¬æ¢ç­–ç•¥ |
+| `/monte-carlo` | æˆåŠŸæ¦‚çŽ‡ã€æœŸæœ«èµ„äº§ç™¾åˆ†ä½ã€æ‰‡å½¢å›¾ |
+| `/login` | åŸºäºŽ Supabase çš„ç™»å½•ï¼ˆå¯é€‰ â€”â€” ä¸ç™»å½•ä¹Ÿå¯å®Œæ•´ä½¿ç”¨ï¼‰ |
 
-## 🚀 技术栈
+## ðŸš€ æŠ€æœ¯æ ˆ
 
-- **前端**: Angular 20（独立组件 + Signals，无 NgModules）
-- **UI**: Angular Material + ngx-charts 数据可视化
-- **持久化（可选）**: Supabase (PostgreSQL + Auth)，用于保存情景和账户
-- **托管平台**: Vercel（SPA 单页应用模式）
-- **核心计算**: 纯 TypeScript 函数，与框架无关 —— 整个计算引擎在浏览器中运行，无需服务器交互
+- **å‰ç«¯**: Angular 20ï¼ˆç‹¬ç«‹ç»„ä»¶ + Signalsï¼Œæ—  NgModulesï¼‰
+- **UI**: Angular Material + ngx-charts æ•°æ®å¯è§†åŒ–
+- **æŒä¹…åŒ–ï¼ˆå¯é€‰ï¼‰**: Supabase (PostgreSQL + Auth)ï¼Œç”¨äºŽä¿å­˜æƒ…æ™¯å’Œè´¦æˆ·
+- **æ‰˜ç®¡å¹³å°**: Vercelï¼ˆSPA å•é¡µåº”ç”¨æ¨¡å¼ï¼‰
+- **æ ¸å¿ƒè®¡ç®—**: çº¯ TypeScript å‡½æ•°ï¼Œä¸Žæ¡†æž¶æ— å…³ â€”â€” æ•´ä¸ªè®¡ç®—å¼•æ“Žåœ¨æµè§ˆå™¨ä¸­è¿è¡Œï¼Œæ— éœ€æœåŠ¡å™¨äº¤äº’
 
-## 🧮 计算引擎
+## ðŸ§® è®¡ç®—å¼•æ“Ž
 
-核心逻辑位于 `src/app/core/calculators/`，全部为纯函数、不可变数据、带单元测试：
+æ ¸å¿ƒé€»è¾‘ä½äºŽ `src/app/core/calculators/`ï¼Œå…¨éƒ¨ä¸ºçº¯å‡½æ•°ã€ä¸å¯å˜æ•°æ®ã€å¸¦å•å…ƒæµ‹è¯•ï¼š
 
-| 模块 | 职责 |
+| æ¨¡å— | èŒè´£ |
 |---|---|
-| `tax-tables.ts` | 联邦税率区间和标准扣除额（2026 年，单身申报），含税级通胀调整 |
-| `tax-bracket-calculator.ts` | 超额累进税率计算：边际税率、区间剩余额度、税率上限 |
-| `rmd-calculator.ts` | IRS 统一生命周期表除数；SECURE 2.0 起始年龄（按出生年份为 73 或 75 岁） |
-| `roth-conversion-calculator.ts` | 逐年模拟主循环：RMD、社会安全金、转换、税负、资产增长 |
-| `scenario-engine.ts` | 情景运行入口；`auto-optimize` 模式下遍历各税率区间上限寻优 |
-| `strategy-selector.ts` | 通过逐年模拟两条筹资路径，按资产类别判定 Roth 转换 vs. Buy-Borrow-Die |
-| `action-plan.ts` | 将胜出策略转化为仪表盘上的逐年具体行动 |
-| `social-security-calculator.ts` | 领取年龄对比（62/67/70），含终身现值与盈亏平衡年龄 |
-| `monte-carlo.ts` / `monte-carlo-returns.ts` | 5,000 次模拟，采用几何均值锚定的平稳区块自助抽样重放历史收益序列；分块执行以保证 UI 不卡顿 |
+| `tax-tables.ts` | è”é‚¦ç¨ŽçŽ‡åŒºé—´å’Œæ ‡å‡†æ‰£é™¤é¢ï¼ˆ2026 å¹´ï¼Œå•èº«ç”³æŠ¥ï¼‰ï¼Œå«ç¨Žçº§é€šèƒ€è°ƒæ•´ |
+| `tax-bracket-calculator.ts` | è¶…é¢ç´¯è¿›ç¨ŽçŽ‡è®¡ç®—ï¼šè¾¹é™…ç¨ŽçŽ‡ã€åŒºé—´å‰©ä½™é¢åº¦ã€ç¨ŽçŽ‡ä¸Šé™ |
+| `rmd-calculator.ts` | IRS ç»Ÿä¸€ç”Ÿå‘½å‘¨æœŸè¡¨é™¤æ•°ï¼›SECURE 2.0 èµ·å§‹å¹´é¾„ï¼ˆæŒ‰å‡ºç”Ÿå¹´ä»½ä¸º 73 æˆ– 75 å²ï¼‰ |
+| `roth-conversion-calculator.ts` | é€å¹´æ¨¡æ‹Ÿä¸»å¾ªçŽ¯ï¼šRMDã€ç¤¾ä¼šå®‰å…¨é‡‘ã€è½¬æ¢ã€ç¨Žè´Ÿã€èµ„äº§å¢žé•¿ |
+| `scenario-engine.ts` | æƒ…æ™¯è¿è¡Œå…¥å£ï¼›`auto-optimize` æ¨¡å¼ä¸‹éåŽ†å„ç¨ŽçŽ‡åŒºé—´ä¸Šé™å¯»ä¼˜ |
+| `strategy-selector.ts` | é€šè¿‡é€å¹´æ¨¡æ‹Ÿä¸¤æ¡ç­¹èµ„è·¯å¾„ï¼ŒæŒ‰èµ„äº§ç±»åˆ«åˆ¤å®š Roth è½¬æ¢ vs. Buy-Borrow-Die |
+| `action-plan.ts` | å°†èƒœå‡ºç­–ç•¥è½¬åŒ–ä¸ºä»ªè¡¨ç›˜ä¸Šçš„é€å¹´å…·ä½“è¡ŒåŠ¨ |
+| `social-security-calculator.ts` | é¢†å–å¹´é¾„å¯¹æ¯”ï¼ˆ62/67/70ï¼‰ï¼Œå«ç»ˆèº«çŽ°å€¼ä¸Žç›ˆäºå¹³è¡¡å¹´é¾„ |
+| `monte-carlo.ts` / `monte-carlo-returns.ts` | 5,000 æ¬¡æ¨¡æ‹Ÿï¼Œé‡‡ç”¨å‡ ä½•å‡å€¼é”šå®šçš„å¹³ç¨³åŒºå—è‡ªåŠ©æŠ½æ ·é‡æ”¾åŽ†å²æ”¶ç›Šåºåˆ—ï¼›åˆ†å—æ‰§è¡Œä»¥ä¿è¯ UI ä¸å¡é¡¿ |
 
-## 🛠️ 本地开发设置
+## ðŸ› ï¸ æœ¬åœ°å¼€å‘è®¾ç½®
 
-1. **安装依赖**
+1. **å®‰è£…ä¾èµ–**
    ```bash
    cd retirement-planner
    npm install
    ```
 
-2. **启动开发服务器**
+2. **å¯åŠ¨å¼€å‘æœåŠ¡å™¨**
    ```bash
    npm start
    ```
-   访问 `http://localhost:4200/`。**Supabase 是可选的** —— 未配置凭据时，应用完全基于内存状态运行（`local-state.service.ts`，含预设默认数据），仅保存/加载情景和登录功能不可用。
+   è®¿é—® `http://localhost:4200/`ã€‚**Supabase æ˜¯å¯é€‰çš„** â€”â€” æœªé…ç½®å‡­æ®æ—¶ï¼Œåº”ç”¨å®Œå…¨åŸºäºŽå†…å­˜çŠ¶æ€è¿è¡Œï¼ˆ`local-state.service.ts`ï¼Œå«é¢„è®¾é»˜è®¤æ•°æ®ï¼‰ï¼Œä»…ä¿å­˜/åŠ è½½æƒ…æ™¯å’Œç™»å½•åŠŸèƒ½ä¸å¯ç”¨ã€‚
 
-3. **（可选）配置 Supabase 持久化**
-   - 在 [Supabase](https://supabase.com) 中创建项目。
-   - 在 Supabase SQL 编辑器中运行 `supabase/migrations/0001_init.sql`，初始化数据库表和行级安全 (RLS) 策略。
-   - 本地开发：在 `src/environments/environment.ts` 中填入 `supabaseUrl` / `supabaseAnonKey`。
-   - 生产环境：设置 `SUPABASE_URL` / `SUPABASE_ANON_KEY` 环境变量（如在 Vercel 中）—— 构建时 `set-env.js` 会自动生成 `environment.production.ts`。**切勿手动编辑 `environment.production.ts`**，每次构建都会将其覆盖。
+3. **ï¼ˆå¯é€‰ï¼‰é…ç½® Supabase æŒä¹…åŒ–**
+   - åœ¨ [Supabase](https://supabase.com) ä¸­åˆ›å»ºé¡¹ç›®ã€‚
+   - åœ¨ Supabase SQL ç¼–è¾‘å™¨ä¸­è¿è¡Œ `supabase/migrations/0001_init.sql`ï¼Œåˆå§‹åŒ–æ•°æ®åº“è¡¨å’Œè¡Œçº§å®‰å…¨ (RLS) ç­–ç•¥ã€‚
+   - æœ¬åœ°å¼€å‘ï¼šåœ¨ `src/environments/environment.ts` ä¸­å¡«å…¥ `supabaseUrl` / `supabaseAnonKey`ã€‚
+   - ç”Ÿäº§çŽ¯å¢ƒï¼šè®¾ç½® `SUPABASE_URL` / `SUPABASE_ANON_KEY` çŽ¯å¢ƒå˜é‡ï¼ˆå¦‚åœ¨ Vercel ä¸­ï¼‰â€”â€” æž„å»ºæ—¶ `set-env.js` ä¼šè‡ªåŠ¨ç”Ÿæˆ `environment.production.ts`ã€‚**åˆ‡å‹¿æ‰‹åŠ¨ç¼–è¾‘ `environment.production.ts`**ï¼Œæ¯æ¬¡æž„å»ºéƒ½ä¼šå°†å…¶è¦†ç›–ã€‚
 
-4. **运行单元测试**
+4. **è¿è¡Œå•å…ƒæµ‹è¯•**
    ```bash
-   npm test                 # 监听模式
-   ng test --watch=false    # 单次运行（CI 模式）
+   npm test                 # ç›‘å¬æ¨¡å¼
+   ng test --watch=false    # å•æ¬¡è¿è¡Œï¼ˆCI æ¨¡å¼ï¼‰
    ```
 
-5. **生产环境打包**
+5. **ç”Ÿäº§çŽ¯å¢ƒæ‰“åŒ…**
    ```bash
    npm run build
    ```
-   产物输出到 `dist/` 目录。
+   äº§ç‰©è¾“å‡ºåˆ° `dist/` ç›®å½•ã€‚
 
-## 📌 未来规划
+## ðŸ“Œ æœªæ¥è§„åˆ’
 
-- IRMAA MAGI 门槛检测及 Medicare Part B/D 附加保费建模。
-- 社会安全金征税规则（基于临时收入，最高 85% 应税）。
-- 支持夫妻联合申报 (MFJ)（当前税表仅覆盖 2026 年单身申报）。
-- 蒙特卡洛结果及历史计算快照的持久化保存。
+- IRMAA MAGI é—¨æ§›æ£€æµ‹åŠ Medicare Part B/D é™„åŠ ä¿è´¹å»ºæ¨¡ã€‚
+- ç¤¾ä¼šå®‰å…¨é‡‘å¾ç¨Žè§„åˆ™ï¼ˆåŸºäºŽä¸´æ—¶æ”¶å…¥ï¼Œæœ€é«˜ 85% åº”ç¨Žï¼‰ã€‚
+- æ”¯æŒå¤«å¦»è”åˆç”³æŠ¥ (MFJ)ï¼ˆå½“å‰ç¨Žè¡¨ä»…è¦†ç›– 2026 å¹´å•èº«ç”³æŠ¥ï¼‰ã€‚
+- è’™ç‰¹å¡æ´›ç»“æžœåŠåŽ†å²è®¡ç®—å¿«ç…§çš„æŒä¹…åŒ–ä¿å­˜ã€‚
 
-## ⚠️ 免责声明
+## âš ï¸ å…è´£å£°æ˜Ž
 
-本工具仅用于建模分析，不构成财务或税务建议。税表仅覆盖单一申报身份和年度，预测结果完全取决于你输入的假设。在执行任何策略前，请咨询合格的专业人士。
+æœ¬å·¥å…·ä»…ç”¨äºŽå»ºæ¨¡åˆ†æžï¼Œä¸æž„æˆè´¢åŠ¡æˆ–ç¨ŽåŠ¡å»ºè®®ã€‚ç¨Žè¡¨ä»…è¦†ç›–å•ä¸€ç”³æŠ¥èº«ä»½å’Œå¹´åº¦ï¼Œé¢„æµ‹ç»“æžœå®Œå…¨å–å†³äºŽä½ è¾“å…¥çš„å‡è®¾ã€‚åœ¨æ‰§è¡Œä»»ä½•ç­–ç•¥å‰ï¼Œè¯·å’¨è¯¢åˆæ ¼çš„ä¸“ä¸šäººå£«ã€‚

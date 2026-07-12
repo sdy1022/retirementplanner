@@ -100,8 +100,9 @@ describe('scenario-engine', () => {
     expect(y60.conversion).toBeGreaterThan(0);
     expect(y61.taxableIncome).toBe(y60.taxableIncome);
     expect(y62.taxableIncome).toBe(y61.taxableIncome);
-    // ...because the conversion drops by exactly the taxable portion of the annual SS benefit ($2,800 * 12 * 0.85).
-    expect(y61.conversion - y62.conversion).toBe(28560);
+    // ...because the conversion drops by exactly the taxable portion of the annual SS benefit,
+    // COLA-indexed from the simulation start: $2,800 * 12 * 1.025^2 * 0.85 = $30,005.85.
+    expect(y61.conversion - y62.conversion).toBeCloseTo(30005.85, 2);
 
     // Every RMD year lands at or below the target bracket.
     const rmdYears = result.years.filter(y => y.rmd > 0);
@@ -129,11 +130,13 @@ describe('scenario-engine', () => {
     };
 
     // Expenses inflate 3%/yr after retirement: $30,000 in year one, $30,900 in year two.
-    // Zero cost basis: every withdrawn dollar is gain, taxed at 15% federal.
+    // Zero cost basis: every withdrawn dollar is gain — but with no other income the gains
+    // stack from $0 of ordinary taxable income, far below the $49,450 single 0% breakpoint,
+    // so the federal capital-gains tax is zero (the retiree harvests gains in the 0% band).
     const allGain = runScenario(scenario, [{ type: 'brokerage', balance: 100000, costBasis: 0, snapshotDate: '2026-01-01' }]);
-    expect(allGain.totalTax).toBe(9135); // 4500 + 4635
-    expect(allGain.years[0].endingAssets).toBe(65500);
-    expect(allGain.endingAssets).toBe(29965);
+    expect(allGain.totalTax).toBe(0);
+    expect(allGain.years[0].endingAssets).toBe(70000);
+    expect(allGain.endingAssets).toBe(39100);
 
     // Full cost basis (default when omitted): withdrawals are return of principal, no tax.
     const allPrincipal = runScenario(scenario, [{ type: 'brokerage', balance: 100000, snapshotDate: '2026-01-01' }]);
@@ -198,9 +201,217 @@ describe('scenario-engine', () => {
     // No Medicare before 65.
     expect(byAge.get(63)!.irmaa).toBe(0);
     expect(byAge.get(64)!.irmaa).toBe(0);
-    // At 65, the surcharge is driven by age-63 MAGI ($200k, single):
-    // above the $171k tier but not above $205k -> $385.00/mo * 12 = $4,620.
-    expect(byAge.get(65)!.irmaa).toBe(4620);
+    // At 65, the surcharge is driven by age-63 MAGI ($200k, single) against the year-65
+    // thresholds, inflated 3%/yr for two years: the $171k tier becomes $181,414 (crossed)
+    // and $205k becomes $217,485 (not crossed) -> $385.00/mo * 1.0609 * 12 = $4,901.36.
+    expect(byAge.get(65)!.irmaa).toBe(4901.36);
+  });
+
+  it('applies Social Security COLA from the simulation start (and freezes at ssColaRate 0)', () => {
+    const scenario: Scenario = {
+      name: 'SS COLA',
+      currentAge: 62,
+      retirementAge: 62,
+      birthYear: 1964,
+      ssClaimAge: 62,
+      ssPia: 1000,
+      lifeExpectancy: 64,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 50000,
+      ssColaRate: 0.02,
+    };
+    const accounts = [{ type: 'brokerage' as const, balance: 500000, snapshotDate: '2026-01-01' }];
+
+    const result = runScenario(scenario, accounts);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    expect(byAge.get(62)!.expensesFromSs).toBe(12000);
+    expect(byAge.get(63)!.expensesFromSs).toBe(12240); // 12,000 * 1.02
+    expect(byAge.get(64)!.expensesFromSs).toBeCloseTo(12484.8, 2); // 12,000 * 1.02^2
+
+    const frozen = runScenario({ ...scenario, ssColaRate: 0 }, accounts);
+    expect(frozen.years.every(y => y.expensesFromSs === 12000)).toBe(true);
+  });
+
+  it('applies the 65+ senior deductions (additional standard deduction + OBBBA bonus) to federal tax', () => {
+    const scenario: Scenario = {
+      name: 'Senior deduction',
+      currentAge: 64,
+      retirementAge: 64,
+      birthYear: 1962,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 65,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 100000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+    };
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 1000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 500000, costBasis: 500000, snapshotDate: '2026-01-01' },
+    ]);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    // Age 64 (2026): no senior deduction. $100k conversion less the $16,100 standard
+    // deduction -> $13,170 federal tax.
+    expect(byAge.get(64)!.federalTax).toBe(13170);
+    // Age 65 (2027): the additional standard deduction ($2,050 * 1.03) plus the OBBBA bonus
+    // ($6,000 less the 6% phaseout above $75k MAGI = $4,500) shave $6,611.50 off ordinary
+    // income -> $11,450.57, vs $12,905.10 from bracket indexing alone.
+    expect(byAge.get(65)!.federalTax).toBe(11450.57);
+  });
+
+  it('grosses up brokerage sales that pay conversion taxes for the gains they realize', () => {
+    const scenario: Scenario = {
+      name: 'Payment-sale gains',
+      currentAge: 64,
+      retirementAge: 64,
+      birthYear: 1962,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 64,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 100000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+    };
+    // Zero-basis brokerage: every dollar sold to pay the conversion tax is itself a gain,
+    // taxed at 15% (the $100k conversion fills the 0% band). The sale must gross itself
+    // up: sale = $13,170 / (1 - 0.15) = $15,494.12.
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 1000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 500000, costBasis: 0, snapshotDate: '2026-01-01' },
+    ]);
+    const [year] = result.years;
+    expect(year.federalTax).toBe(15494.12);
+    expect(year.taxFromBrokerage).toBe(15494.12);
+    expect(year.brokerageBalance).toBe(484505.88);
+    expect(year.shortfall).toBe(0);
+  });
+
+  it('charges the 10% early-distribution penalty on pre-59.5 traditional withdrawals', () => {
+    const scenario: Scenario = {
+      name: 'Early retiree',
+      currentAge: 55,
+      retirementAge: 55,
+      birthYear: 1971,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 55,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 20000,
+    };
+    const result = runScenario(scenario, [{ type: 'traditional_ira', balance: 100000, snapshotDate: '2026-01-01' }]);
+    const [year] = result.years;
+    // $20k of expenses from traditional at 55: $390 ordinary tax + $2,000 penalty. With no
+    // brokerage, the tax is paid by another traditional withdrawal, grossed up for its own
+    // tax AND its own penalty (both in the 10% bracket): w = 2,390 + 0.2w -> $2,987.50.
+    expect(year.federalTax).toBe(2987.5);
+    expect(year.earlyWithdrawalPenalty).toBe(2298.75); // 2,000 + 10% of the 2,987.50 gross-up
+    expect(year.traditionalBalance).toBe(77012.5);
+    expect(year.shortfall).toBe(0);
+  });
+
+  it('uses preSimulationMagi for the IRMAA lookback when the plan starts at Medicare age', () => {
+    const scenario: Scenario = {
+      name: 'IRMAA pre-sim MAGI',
+      currentAge: 65,
+      retirementAge: 65,
+      birthYear: 1961,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 65,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 200000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+    };
+    const accounts = [
+      { type: 'traditional_ira' as const, balance: 1000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 500000, costBasis: 500000, snapshotDate: '2026-01-01' },
+    ];
+    // Without pre-sim MAGI the fallback wrongly judges age-65 IRMAA by the age-65
+    // conversion income ($200k -> tier 3); with the real two-years-ago income ($50k,
+    // below every threshold) the first Medicare year owes no surcharge.
+    const withoutHistory = runScenario(scenario, accounts);
+    expect(withoutHistory.years[0].irmaa).toBeGreaterThan(0);
+    const withHistory = runScenario({ ...scenario, preSimulationMagi: 50000 }, accounts);
+    expect(withHistory.years[0].irmaa).toBe(0);
+  });
+
+  it('survivor keeps the larger SS benefit and moves to single filing after the spouse dies', () => {
+    const scenario: Scenario = {
+      name: 'Survivor',
+      currentAge: 67,
+      retirementAge: 67,
+      birthYear: 1959,
+      ssClaimAge: 67,
+      ssPia: 2000,
+      ssColaRate: 0,
+      lifeExpectancy: 75,
+      filingStatus: 'married_filing_jointly',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 60000,
+      spouseCurrentAge: 67,
+      spouseLifeExpectancy: 70,
+      spouseSsPia: 1000,
+      spouseSsClaimAge: 67,
+    };
+    const result = runScenario(scenario, [{ type: 'brokerage', balance: 2000000, snapshotDate: '2026-01-01' }]);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    // Both alive (through the spouse's final year at 70): benefits add ($2,000 + $1,000) * 12
+    expect(byAge.get(67)!.expensesFromSs).toBe(36000);
+    expect(byAge.get(70)!.expensesFromSs).toBe(36000);
+    // Survivor keeps the larger benefit only
+    expect(byAge.get(71)!.expensesFromSs).toBe(24000);
+    expect(byAge.get(75)!.expensesFromSs).toBe(24000);
+  });
+
+  it('widow\'s tax penalty: the same income is taxed in higher brackets after the spouse dies', () => {
+    const scenario: Scenario = {
+      name: 'Widow penalty',
+      currentAge: 70,
+      retirementAge: 70,
+      birthYear: 1956,
+      ssClaimAge: 70,
+      ssPia: 0,
+      lifeExpectancy: 73,
+      filingStatus: 'married_filing_jointly',
+      rothConversionStrategy: { mode: 'fixed-amount', amount: 100000 },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 0,
+      annualLivingExpenses: 0,
+      spouseCurrentAge: 70,
+      spouseLifeExpectancy: 71,
+    };
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 2000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 1000000, costBasis: 1000000, snapshotDate: '2026-01-01' },
+    ]);
+    const byAge = new Map(result.years.map(y => [y.age, y]));
+    // The same $100k conversion sits in the 12% bracket on a joint return, but lands in
+    // the 22% bracket on the survivor's single return from age 72 on
+    expect(byAge.get(70)!.marginalRate).toBe(0.12);
+    expect(byAge.get(71)!.marginalRate).toBe(0.12); // spouse's final (joint) year
+    expect(byAge.get(72)!.marginalRate).toBe(0.22);
+    expect(byAge.get(72)!.federalTax).toBeGreaterThan(byAge.get(71)!.federalTax);
   });
 
   it('fill-to-income keeps converting past RMD age until conversionStopAge', () => {

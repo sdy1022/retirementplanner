@@ -77,11 +77,86 @@ export const IRMAA_TIERS: Record<FilingStatus, IrmaaTier[]> = {
   ],
 };
 
-export function irmaaAnnualSurcharge(magi: number, filingStatus: FilingStatus): number {
+// CMS adjusts IRMAA thresholds (and premiums) annually for inflation; simulated future
+// years scale the 2026 tiers by inflationFactor so fixed nominal thresholds don't tax
+// 30 years of nominal income growth as if it were real bracket creep.
+export function irmaaAnnualSurcharge(magi: number, filingStatus: FilingStatus, inflationFactor = 1): number {
   const persons = filingStatus === 'married_filing_jointly' ? 2 : 1;
   let monthly = 0;
   for (const tier of IRMAA_TIERS[filingStatus]) {
-    if (magi > tier.magiThreshold) monthly = tier.monthlySurchargePerPerson;
+    if (magi > tier.magiThreshold * inflationFactor) monthly = tier.monthlySurchargePerPerson * inflationFactor;
   }
   return Math.round(monthly * 12 * persons * 100) / 100;
+}
+
+// 2026 long-term capital gains / qualified dividend breakpoints (taxable income) per
+// Rev. Proc. 2025-32: 0% up to the first threshold, 15% up to the second, 20% above.
+// Inflation-indexed alongside the ordinary brackets.
+const CAPITAL_GAINS_BRACKETS_2026: Record<FilingStatus, { zeroRateMax: number; fifteenRateMax: number }> = {
+  single: { zeroRateMax: 49450, fifteenRateMax: 545500 },
+  married_filing_jointly: { zeroRateMax: 98900, fifteenRateMax: 613700 },
+};
+
+// Long-term gains and qualified dividends stack ON TOP of ordinary taxable income: the
+// 0/15/20% band each gain dollar lands in depends on where the ordinary income already
+// reached. ordinaryTaxableIncome is income AFTER deductions (the same base the ordinary
+// brackets tax); gains below the 0% breakpoint are tax-free, which is why a low-income
+// retiree can realize substantial gains at 0%.
+export function capitalGainsFederalTax(gains: number, ordinaryTaxableIncome: number, filingStatus: FilingStatus, inflationFactor = 1): number {
+  if (gains <= 0) return 0;
+  const zeroMax = CAPITAL_GAINS_BRACKETS_2026[filingStatus].zeroRateMax * inflationFactor;
+  const fifteenMax = CAPITAL_GAINS_BRACKETS_2026[filingStatus].fifteenRateMax * inflationFactor;
+  const start = Math.max(0, ordinaryTaxableIncome);
+  const zeroPortion = Math.min(gains, Math.max(0, zeroMax - start));
+  const fifteenPortion = Math.min(gains - zeroPortion, Math.max(0, fifteenMax - Math.max(start, zeroMax)));
+  const twentyPortion = gains - zeroPortion - fifteenPortion;
+  return Math.round((fifteenPortion * 0.15 + twentyPortion * 0.2) * 100) / 100;
+}
+
+// Net Investment Income Tax: 3.8% on the lesser of net investment income and the MAGI
+// excess over the statutory thresholds — which are NOT inflation-indexed, so more
+// retirees cross them every year by design.
+export const NIIT_RATE = 0.038;
+const NIIT_MAGI_THRESHOLD: Record<FilingStatus, number> = {
+  single: 200000,
+  married_filing_jointly: 250000,
+};
+
+export function netInvestmentIncomeTax(netInvestmentIncome: number, magi: number, filingStatus: FilingStatus): number {
+  if (netInvestmentIncome <= 0) return 0;
+  const excess = Math.max(0, magi - NIIT_MAGI_THRESHOLD[filingStatus]);
+  return Math.round(NIIT_RATE * Math.min(netInvestmentIncome, excess) * 100) / 100;
+}
+
+// Additional standard deduction for taxpayers 65+ (IRC §63(f)), 2026 amounts per
+// Rev. Proc. 2025-32: $2,050 for unmarried filers, $1,650 per qualifying spouse for MFJ.
+// Inflation-indexed like the basic standard deduction.
+const SENIOR_ADDITIONAL_DEDUCTION_2026: Record<FilingStatus, number> = {
+  single: 2050,
+  married_filing_jointly: 1650,
+};
+
+// OBBBA enhanced senior deduction: $6,000 per qualifying individual 65+, tax years
+// 2025–2028 only, phased out at 6% of MAGI above $75,000 (single) / $150,000 (MFJ).
+// Statutory amounts — not inflation-indexed.
+const OBBBA_SENIOR_DEDUCTION_PER_PERSON = 6000;
+const OBBBA_SENIOR_LAST_YEAR = 2028;
+const OBBBA_PHASEOUT_RATE = 0.06;
+const OBBBA_PHASEOUT_THRESHOLD: Record<FilingStatus, number> = {
+  single: 75000,
+  married_filing_jointly: 150000,
+};
+
+// Total senior deductions for one tax year, subtracted from gross income on top of the
+// basic standard deduction. For MFJ both spouses are assumed the same age (the model has
+// a single age), so 65+ counts two qualifying persons.
+export function seniorDeduction(age: number, filingStatus: FilingStatus, calendarYear: number, magi: number, inflationFactor = 1): number {
+  if (age < 65) return 0;
+  const persons = filingStatus === 'married_filing_jointly' ? 2 : 1;
+  let deduction = SENIOR_ADDITIONAL_DEDUCTION_2026[filingStatus] * persons * inflationFactor;
+  if (calendarYear <= OBBBA_SENIOR_LAST_YEAR) {
+    const phaseout = Math.max(0, magi - OBBBA_PHASEOUT_THRESHOLD[filingStatus]) * OBBBA_PHASEOUT_RATE;
+    deduction += Math.max(0, OBBBA_SENIOR_DEDUCTION_PER_PERSON * persons - phaseout);
+  }
+  return deduction;
 }
