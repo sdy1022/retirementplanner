@@ -7,7 +7,11 @@ export class AccountService {
   private readonly supabase = inject(SupabaseService);
 
   async list(): Promise<AccountSnapshot[]> {
-    const { data, error } = await this.requireClient().from('accounts').select('*').order('snapshot_date', { ascending: false });
+    const { data, error } = await this.requireClient()
+      .from('accounts')
+      .select('*')
+      .order('snapshot_date', { ascending: false })
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -19,14 +23,20 @@ export class AccountService {
     }));
   }
 
-  create(account: AccountSnapshot, userId: string) {
-    return this.requireClient().from('accounts').insert({
+  async create(account: AccountSnapshot, userId: string): Promise<void> {
+    await this.createMany([account], userId);
+  }
+
+  async createMany(accounts: AccountSnapshot[], userId: string): Promise<void> {
+    const rows = accounts.map((account) => ({
       user_id: userId,
       type: account.type,
       balance: account.balance,
       cost_basis: account.costBasis,
       snapshot_date: account.snapshotDate,
-    });
+    }));
+    const { error } = await this.requireClient().from('accounts').insert(rows);
+    if (error) throw error;
   }
 
   private requireClient() {

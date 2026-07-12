@@ -1,11 +1,9 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { AccountService } from './core/services/account.service';
-import { LocalStateService } from './core/services/local-state.service';
-import { AccountSnapshot } from './core/models/retirement.models';
+import { AuthService } from './core/services/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -34,10 +32,17 @@ import { AccountSnapshot } from './core/models/retirement.models';
           <mat-icon>help</mat-icon>
           Help
         </a>
-        <a mat-button routerLink="/login" routerLinkActive="active-link">
-          <mat-icon>login</mat-icon>
-          Login
-        </a>
+        @if (auth.currentUser()) {
+          <button mat-button (click)="signOut()">
+            <mat-icon>logout</mat-icon>
+            Sign Out ({{ auth.currentUser()?.email }})
+          </button>
+        } @else {
+          <a mat-button routerLink="/login" routerLinkActive="active-link">
+            <mat-icon>login</mat-icon>
+            Login
+          </a>
+        }
       </nav>
     </mat-toolbar>
     <main>
@@ -84,29 +89,14 @@ import { AccountSnapshot } from './core/models/retirement.models';
     }
   `
 })
-export class App implements OnInit {
-  private readonly accountService = inject(AccountService);
-  private readonly state = inject(LocalStateService);
+export class App {
+  readonly auth = inject(AuthService);
 
-  async ngOnInit() {
+  async signOut() {
     try {
-      const allAccounts = await this.accountService.list();
-      if (allAccounts.length > 0) {
-        // Only keep the most recent snapshot for each account type
-        const latestMap = new Map<string, AccountSnapshot>();
-        for (const acc of allAccounts) {
-          if (!latestMap.has(acc.type)) {
-            latestMap.set(acc.type, acc);
-          }
-        }
-        
-        // Completely replace local accounts with the live Supabase data.
-        // We do not merge with localStorage here because we don't want to accidentally 
-        // sum old dummy accounts (like traditional_401k) with the new traditional_ira total!
-        this.state.setAccounts(Array.from(latestMap.values()));
-      }
+      await this.auth.signOut();
     } catch (err) {
-      console.warn('Could not pull latest Supabase accounts on load:', err);
+      alert('Sign out failed: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
 }

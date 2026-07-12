@@ -9,6 +9,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { RothConversionStrategy, Scenario } from '../../core/models/retirement.models';
 import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
+import { ScenarioService } from '../../core/services/scenario.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -63,10 +65,23 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
         </form>
       </mat-card-content>
     </mat-card>
+
+    @if (auth.currentUser()) {
+      <mat-card class="panel">
+        <mat-card-header><mat-card-title>Cloud Sync</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <div class="actions">
+            <button mat-flat-button color="primary" (click)="saveToCloud()">Save to Supabase</button>
+            <button mat-stroked-button (click)="loadFromCloud()">Load from Supabase</button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
   `,
   styles: `
-    .panel { max-width: 980px; }
+    .panel { max-width: 980px; margin-bottom: 20px; }
     .form-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 14px; padding-top: 16px; }
+    .actions { display: flex; gap: 12px; padding-top: 16px; flex-wrap: wrap; }
     button { justify-self: start; min-width: 160px; }
     @media (max-width: 780px) { .form-grid { grid-template-columns: 1fr; } }
   `,
@@ -74,6 +89,8 @@ import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-e
 export class ScenarioBuilder {
   private readonly state = inject(LocalStateService);
   private readonly fb = inject(FormBuilder);
+  readonly scenarioService = inject(ScenarioService);
+  readonly auth = inject(AuthService);
 
   constructor() {
     effect(() => {
@@ -166,5 +183,57 @@ export class ScenarioBuilder {
     ]);
 
     this.state.updateScenario(scenario);
+  }
+
+  async saveToCloud(): Promise<void> {
+    const user = this.auth.currentUser();
+    if (!user) return;
+    try {
+      await this.scenarioService.create(this.state.scenario(), user.id);
+      alert('Scenario saved to cloud successfully.');
+    } catch (e) {
+      alert('Error saving scenario: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  async loadFromCloud(): Promise<void> {
+    try {
+      const list = await this.scenarioService.list();
+      if (list.length > 0) {
+        const scenario = list[0]; // Load the most recent scenario
+        this.state.updateScenario(scenario);
+        
+        // Also update form with new state values
+        this.form.patchValue({
+          name: scenario.name,
+          currentAge: scenario.currentAge,
+          retirementAge: scenario.retirementAge,
+          birthYear: scenario.birthYear,
+          wageIncome: scenario.wageIncome,
+          annualWageGrowth: scenario.annualWageGrowth ?? 0,
+          annualOtherIncome: scenario.annualOtherIncome ?? 0,
+          annualLivingExpenses: scenario.annualLivingExpenses ?? 0,
+          ssClaimAge: scenario.ssClaimAge,
+          ssPia: scenario.ssPia,
+          lifeExpectancy: scenario.lifeExpectancy,
+          assumedReturnRate: scenario.assumedReturnRate,
+          stateTaxRate: scenario.stateTaxRate,
+          residualTaxRate: scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE,
+          allowPreRetirementConversions: scenario.allowPreRetirementConversions ?? false,
+          brokerageGainsTaxRate: scenario.brokerageGainsTaxRate ?? 0,
+          dividendYield: scenario.dividendYield ?? 0.015,
+          filingStatus: scenario.filingStatus,
+          conversionMode: scenario.rothConversionStrategy.mode,
+          fixedAmount: scenario.rothConversionStrategy.mode === 'fixed-amount' ? (scenario.rothConversionStrategy as any).amount : 25000,
+          targetBracket: 'targetBracket' in scenario.rothConversionStrategy ? (scenario.rothConversionStrategy as any).targetBracket : 0.24,
+        });
+
+        alert('Scenario loaded from cloud successfully.');
+      } else {
+        alert('No scenarios found in cloud.');
+      }
+    } catch (e) {
+      alert('Error loading scenario: ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
 }

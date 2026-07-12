@@ -8,6 +8,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../../core/calculators/monte-carlo';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from '../../core/calculators/scenario-engine';
+import { downloadFile, escapeCsvField, exportFilename } from '../../core/services/export.service';
 import { LocalStateService } from '../../core/services/local-state.service';
 
 @Component({
@@ -87,6 +88,9 @@ import { LocalStateService } from '../../core/services/local-state.service';
             @if (running()) {
               <div class="mc-loading"><mat-spinner diameter="24" /> <span>Simulating market paths… {{ progress() | number }} / {{ trials | number }}</span></div>
             }
+            @if (result()) {
+              <button mat-button (click)="exportMonteCarloCsv()" id="export-mc-csv-btn" class="mc-export-btn">📥 Export Monte Carlo CSV</button>
+            }
             @if (error()) {
               <p class="strategy-note mc-error">⚠️ {{ error() }}</p>
             }
@@ -145,6 +149,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
     .mc-chart mat-card-content { min-height: 380px; }
+    .mc-export-btn { margin-left: 10px; font-size: 0.85rem; text-transform: none; }
   `,
 })
 export class MonteCarlo {
@@ -209,5 +214,57 @@ export class MonteCarlo {
     } finally {
       this.running.set(false);
     }
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  /** Export Monte Carlo results as CSV: metadata header + percentile fan chart data. */
+  exportMonteCarloCsv(): void {
+    const mc = this.result()!;
+    const scenario = this.state.scenario();
+
+    // Metadata section — key-value pairs describing the simulation run
+    const metaRows: [string, string | number][] = [
+      ['trials', mc.trials],
+      ['successProbability', mc.successProbability],
+      ['meanEndingAssets', mc.meanEndingAssets],
+      ['p10EndingAssets', mc.endingAssetsPercentiles.p10],
+      ['p25EndingAssets', mc.endingAssetsPercentiles.p25],
+      ['p50EndingAssets', mc.endingAssetsPercentiles.p50],
+      ['p75EndingAssets', mc.endingAssetsPercentiles.p75],
+      ['p90EndingAssets', mc.endingAssetsPercentiles.p90],
+      ['guardrailEnabled', this.resultUsedGuardrail() ? 'true' : 'false'],
+      ['assumedReturnRate', scenario.assumedReturnRate],
+      ['strategyMode', scenario.rothConversionStrategy.mode],
+      ['exportedAt', new Date().toISOString()],
+    ];
+
+    // Deterministic comparison line on the same after-tax basis as the fan chart
+    const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
+    const gainsRate = scenario.brokerageGainsTaxRate ?? 0;
+    const deterministic = runScenario(scenario, this.state.accounts());
+    const detByAge = new Map(
+      deterministic.years.map(y => [y.age, afterTaxAssetsForYear(y, residualRate, gainsRate)])
+    );
+
+    // Fan chart data section
+    const dataHeaders = ['age', 'p10', 'p25', 'p50', 'p75', 'p90', 'deterministic'];
+    const dataRows = mc.assetsByAge.map(row => [
+      row.age, row.p10, row.p25, row.p50, row.p75, row.p90,
+      detByAge.get(row.age) ?? '',
+    ]);
+
+    // Build combined CSV: metadata header block, blank separator, percentile data
+    const BOM = '\uFEFF';
+    const lines = [
+      'key,value',
+      ...metaRows.map(([k, v]) => `${escapeCsvField(k)},${escapeCsvField(v)}`),
+      '',
+      dataHeaders.map(escapeCsvField).join(','),
+      ...dataRows.map(row => row.map(escapeCsvField).join(',')),
+    ];
+
+    const content = BOM + lines.join('\r\n') + '\r\n';
+    downloadFile(exportFilename('monte-carlo', 'csv'), content, 'text/csv;charset=utf-8');
   }
 }

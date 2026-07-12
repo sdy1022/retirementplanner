@@ -25,11 +25,17 @@ export class ScenarioService {
       stateTaxRate: Number(row.state_tax_rate ?? 0),
       wageIncome: Number(row.wage_income ?? 0),
       annualLivingExpenses: Number(row.annual_living_expenses ?? 0),
+      annualOtherIncome: Number(row.annual_other_income ?? 0),
+      annualWageGrowth: Number(row.annual_wage_growth ?? 0),
+      residualTaxRate: row.residual_tax_rate == null ? undefined : Number(row.residual_tax_rate),
+      allowPreRetirementConversions: row.allow_pre_retirement_conversions ?? false,
+      brokerageGainsTaxRate: Number(row.brokerage_gains_tax_rate ?? 0),
+      dividendYield: row.dividend_yield == null ? undefined : Number(row.dividend_yield),
     }));
   }
 
-  create(scenario: Scenario, userId: string) {
-    return this.requireClient().from('scenarios').insert({
+  async create(scenario: Scenario, userId: string): Promise<void> {
+    const { error } = await this.requireClient().from('scenarios').insert({
       user_id: userId,
       name: scenario.name,
       current_age: scenario.currentAge,
@@ -44,7 +50,14 @@ export class ScenarioService {
       state_tax_rate: scenario.stateTaxRate,
       wage_income: scenario.wageIncome,
       annual_living_expenses: scenario.annualLivingExpenses,
+      annual_other_income: scenario.annualOtherIncome,
+      annual_wage_growth: scenario.annualWageGrowth,
+      residual_tax_rate: scenario.residualTaxRate,
+      allow_pre_retirement_conversions: scenario.allowPreRetirementConversions,
+      brokerage_gains_tax_rate: scenario.brokerageGainsTaxRate,
+      dividend_yield: scenario.dividendYield,
     });
+    if (error) throw error;
   }
 
   private requireClient() {

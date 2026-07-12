@@ -9,6 +9,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { AccountSnapshot, AccountType } from '../../core/models/retirement.models';
+import { AccountService } from '../../core/services/account.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-accounts',
@@ -65,17 +67,32 @@ import { AccountSnapshot, AccountType } from '../../core/models/retirement.model
           </table>
         </mat-card-content>
       </mat-card>
+
+      @if (auth.currentUser()) {
+        <mat-card>
+          <mat-card-header><mat-card-title>Cloud Sync</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <div class="actions">
+              <button mat-flat-button color="primary" (click)="saveToCloud()">Save to Supabase</button>
+              <button mat-stroked-button (click)="loadFromCloud()">Load from Supabase</button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
     </section>
   `,
   styles: `
     .page-grid { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 20px; align-items: start; }
     .form-grid { display: grid; gap: 14px; padding-top: 16px; }
+    .actions { display: flex; gap: 12px; padding-top: 16px; flex-wrap: wrap; }
     table { width: 100%; }
     @media (max-width: 900px) { .page-grid { grid-template-columns: 1fr; } }
   `,
 })
 export class Accounts {
   readonly state = inject(LocalStateService);
+  readonly accountService = inject(AccountService);
+  readonly auth = inject(AuthService);
   readonly accountTypes: AccountType[] = ['traditional_401k', 'traditional_ira', 'roth_401k', 'roth_ira', 'brokerage'];
   readonly columns = ['type', 'balance', 'snapshotDate'];
   private readonly fb = inject(FormBuilder);
@@ -92,5 +109,36 @@ export class Accounts {
     const account: AccountSnapshot = { ...value, costBasis: value.costBasis || undefined };
     this.state.addAccount(account);
     this.form.patchValue({ balance: 0, costBasis: 0 });
+  }
+
+  async saveToCloud(): Promise<void> {
+    const user = this.auth.currentUser();
+    if (!user) return;
+    try {
+      await this.accountService.createMany(this.state.accounts(), user.id);
+      alert('Accounts saved to cloud successfully.');
+    } catch (e) {
+      alert('Error saving accounts: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  async loadFromCloud(): Promise<void> {
+    try {
+      const list = await this.accountService.list();
+      const latestMap = new Map<string, AccountSnapshot>();
+      for (const acc of list) {
+        if (!latestMap.has(acc.type)) {
+          latestMap.set(acc.type, acc);
+        }
+      }
+      if (latestMap.size > 0) {
+        this.state.setAccounts(Array.from(latestMap.values()));
+        alert('Accounts loaded from cloud successfully.');
+      } else {
+        alert('No accounts found in cloud.');
+      }
+    } catch (e) {
+      alert('Error loading accounts: ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
 }

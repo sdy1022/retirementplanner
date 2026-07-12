@@ -339,9 +339,9 @@ describe('scenario-engine', () => {
   it('grows wages by the annual raise, shrinking working-year conversion room', () => {
     const scenario: Scenario = {
       name: 'MFJ with raises',
-      currentAge: 53,
+      currentAge: 60,
       retirementAge: 60,
-      birthYear: 1973,
+      birthYear: 1966,
       ssClaimAge: 67,
       ssPia: 0,
       lifeExpectancy: 54,
@@ -350,7 +350,7 @@ describe('scenario-engine', () => {
       rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 236700 },
       assumedReturnRate: 0,
       stateTaxRate: 0,
-      wageIncome: 180000,
+      wageIncome: 100000,
       annualLivingExpenses: 0,
       allowPreRetirementConversions: true,
       annualWageGrowth: 5000,

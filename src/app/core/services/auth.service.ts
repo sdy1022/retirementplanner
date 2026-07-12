@@ -1,20 +1,44 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
+import { User } from '@supabase/supabase-js';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly supabase = inject(SupabaseService);
 
-  signIn(email: string, password: string) {
-    return this.requireClient().auth.signInWithPassword({ email, password });
+  readonly currentUser = signal<User | null>(null);
+
+  constructor() {
+    this.initAuth();
   }
 
-  signUp(email: string, password: string) {
-    return this.requireClient().auth.signUp({ email, password });
+  private async initAuth() {
+    if (!this.supabase.client) return;
+
+    // Subscribe before the initial fetch so no auth event can slip between the two
+    this.supabase.client.auth.onAuthStateChange((_event, session) => {
+      this.currentUser.set(session?.user ?? null);
+    });
+
+    const { data: { session } } = await this.supabase.client.auth.getSession();
+    this.currentUser.set(session?.user ?? null);
   }
 
-  signOut() {
-    return this.requireClient().auth.signOut();
+  async signIn(email: string, password: string) {
+    const { data, error } = await this.requireClient().auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  }
+
+  async signUp(email: string, password: string) {
+    const { data, error } = await this.requireClient().auth.signUp({ email, password });
+    if (error) throw error;
+    return data;
+  }
+
+  async signOut() {
+    const { error } = await this.requireClient().auth.signOut();
+    if (error) throw error;
   }
 
   private requireClient() {

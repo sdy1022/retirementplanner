@@ -1,19 +1,21 @@
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
 import { LONG_TERM_CAPITAL_GAINS_RATE, sumAccounts, sumCostBasis } from '../../core/calculators/roth-conversion-calculator';
 import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
 import { effectiveConversionRate, selectStrategy, StrategyChoice } from '../../core/calculators/strategy-selector';
-import { DEFAULT_TAX_YEAR } from '../../core/calculators/tax-tables';
+import { BRACKET_INFLATION_RATE, DEFAULT_TAX_YEAR } from '../../core/calculators/tax-tables';
 import { ScenarioResult, YearResult } from '../../core/models/retirement.models';
+import { toCsv, downloadFile, exportFilename } from '../../core/services/export.service';
 import { LocalStateService } from '../../core/services/local-state.service';
 import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculators/rmd-calculator';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CurrencyPipe, DecimalPipe, MatCardModule, NgxChartsModule],
+  imports: [CurrencyPipe, DecimalPipe, MatButtonModule, MatCardModule, NgxChartsModule],
   template: `
     <section class="rmd-banner">
       <mat-card>
@@ -25,6 +27,11 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <strong>{{ result().endingAssets | currency }}</strong>
           <span class="divider">|</span>
           <span class="data-year">Tax data year: {{ taxDataYear }} (IRS Rev. Proc. 2025-32; CMS 2026 IRMAA)</span>
+          <span class="divider">|</span>
+          <span class="export-group">
+            <button mat-button (click)="exportYearByYearCsv()" id="export-csv-btn">📥 Year-by-Year CSV</button>
+            <button mat-button (click)="exportScenarioJson()" id="export-json-btn">📥 Scenario JSON</button>
+          </span>
         </mat-card-content>
       </mat-card>
     </section>
@@ -175,6 +182,8 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
     .charts { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .export-group { display: inline-flex; gap: 6px; }
+    .export-group button { font-size: 0.85rem; text-transform: none; }
     mat-card-content { min-height: 280px; }
     @media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
   `,
@@ -404,5 +413,82 @@ export class Dashboard {
       { name: result.scenarioName, series: result.years.map((year) => ({ name: String(year.age), value: year[key] })) },
       { name: `Baseline ${label}`, series: baseline.years.map((year) => ({ name: String(year.age), value: year[key] })) },
     ];
+  }
+
+  // ── Export methods ────────────────────────────────────────────────────
+
+  /** Export year-by-year details as CSV with strategy + baseline side-by-side. */
+  exportYearByYearCsv(): void {
+    const scenario = this.state.scenario();
+    const res = this.result();
+    const base = this.baseline();
+
+    const yearFields: (keyof YearResult)[] = [
+      'traditionalBalance', 'rothBalance', 'brokerageBalance', 'brokerageBasis',
+      'rmd', 'conversion',
+      'taxableIncome', 'federalTax', 'stateTax', 'totalTax', 'irmaa', 'marginalRate',
+      'livingExpenses',
+      'expensesFromSs', 'expensesFromRmd', 'expensesFromTraditional',
+      'expensesFromBrokerage', 'expensesFromRoth',
+      'taxFromBrokerage', 'taxWithheldFromConversion', 'taxFromTraditional', 'taxFromRoth',
+      'endingAssets', 'shortfall',
+    ];
+
+    const headers = [
+      'age',
+      ...yearFields.map(f => `strategy_${f}`),
+      ...yearFields.map(f => `baseline_${f}`),
+    ];
+
+    const rows = res.years.map((yr, i) => {
+      const byr = base.years[i];
+      return [
+        yr.age,
+        ...yearFields.map(f => yr[f] as number),
+        ...yearFields.map(f => (byr?.[f] as number) ?? ''),
+      ] as (string | number)[];
+    });
+
+    const csv = toCsv(headers, rows);
+    downloadFile(exportFilename(scenario.name, 'csv'), csv, 'text/csv;charset=utf-8');
+  }
+
+  /** Export scenario assumptions + accounts + full results as JSON backup. */
+  exportScenarioJson(): void {
+    const scenario = this.state.scenario();
+    const accounts = this.state.accounts();
+    const res = this.result();
+    const base = this.baseline();
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      assumptions: {
+        taxDataYear: this.taxDataYear,
+        residualTaxRate: scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE,
+        brokerageGainsTaxRate: scenario.brokerageGainsTaxRate ?? 0,
+        bracketInflationRate: BRACKET_INFLATION_RATE,
+      },
+      scenario,
+      accounts,
+      result: {
+        scenarioName: res.scenarioName,
+        totalTax: res.totalTax,
+        endingAssets: res.endingAssets,
+        resolvedStrategy: res.resolvedStrategy,
+        resolvedSpendingOrder: res.resolvedSpendingOrder,
+        note: res.note,
+        years: res.years,
+      },
+      baseline: {
+        scenarioName: base.scenarioName,
+        totalTax: base.totalTax,
+        endingAssets: base.endingAssets,
+        years: base.years,
+      },
+    };
+
+    const json = JSON.stringify(payload, null, 2);
+    downloadFile(exportFilename(scenario.name, 'json'), json, 'application/json');
   }
 }

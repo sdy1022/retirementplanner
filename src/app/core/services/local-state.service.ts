@@ -10,19 +10,19 @@ const defaultAccounts: AccountSnapshot[] = [
 
 const defaultScenario: Scenario = {
   name: 'Smooth income target',
-  currentAge: 53,
+  currentAge: 60,
   retirementAge: 60,
-  birthYear: 1973,
+  birthYear: 1966,
   ssClaimAge: 67,
-  ssPia: 2200,
+  ssPia: 3300,
   lifeExpectancy: 90,
   filingStatus: 'married_filing_jointly',
   rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
   assumedReturnRate: 0.08,
   stateTaxRate: 0.0495,
-  wageIncome: 180000,
-  annualOtherIncome: 20000,
-  annualLivingExpenses: 120000,
+  wageIncome: 100000,
+  annualOtherIncome: 0,
+  annualLivingExpenses: 150000,
 };
 
 @Injectable({ providedIn: 'root' })
