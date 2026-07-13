@@ -123,9 +123,9 @@ import { LocalStateService } from '../../core/services/local-state.service';
               </div>
               <p class="strategy-note mc-sub-note">
                 Among trials where it triggered, the plan spent a median of {{ gr.medianYearsInCutMode }} year(s) in
-                cut mode (10% spending cut, worst 10% of trials: {{ gr.p90YearsInCutMode }} year(s)). The current
-                guardrail only supports one fixed cut size — this reports how often and how long it was active, not
-                graduated severity tiers.
+                cut mode (average {{ gr.meanYearsInCutMode | number: '1.0-1' }} years, longest consecutive cuts averaged {{ gr.meanConsecutiveCutYears | number: '1.0-1' }} years).
+                The average consumption realization rate across all trials was {{ gr.meanConsumptionRealization * 100 | number: '1.0-1' }}%
+                (10th percentile: {{ gr.p10ConsumptionRealization * 100 | number: '1.0-1' }}%).
               </p>
             }
             @if (mc.failureStats; as fs) {
@@ -154,7 +154,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
           <mat-card-content>
             <p class="strategy-note">
               Re-runs the same plan at ±1 percentage point around your assumed
-              {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% return (smaller trial count, so results are
+              {{ scenario().assumedReturnRate * 100 | number: '1.0-0' }}% return (smaller trial count, so results are
               directionally reliable but noisier than the main run above) to show how much the model success rate
               hinges on that single assumption.
             </p>
@@ -169,6 +169,34 @@ import { LocalStateService } from '../../core/services/local-state.service';
                   @for (row of sensitivityResult(); track row.label) {
                     <tr [class.current]="row.isBase">
                       <td>{{ row.label }}</td>
+                      <td>{{ row.successProbability * 100 | number: '1.0-0' }}%</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <section class="mc-sensitivity">
+        <mat-card>
+          <mat-card-header><mat-card-title>Longevity Sensitivity</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <p class="strategy-note">
+              Re-runs the plan assuming you live to age 90, 95, or 100 to show how longevity risk impacts your model success rate.
+            </p>
+            @if (!longevityResult()) {
+              <button mat-stroked-button [disabled]="longevityRunning()" (click)="runLongevity()">
+                {{ longevityRunning() ? 'Running…' : 'Show longevity sensitivity' }}
+              </button>
+            } @else {
+              <table class="sensitivity-table">
+                <thead><tr><th>End Age</th><th>Model success rate</th></tr></thead>
+                <tbody>
+                  @for (row of longevityResult(); track row.age) {
+                    <tr [class.current]="row.isBase">
+                      <td>{{ row.age }}</td>
                       <td>{{ row.successProbability * 100 | number: '1.0-0' }}%</td>
                     </tr>
                   }
@@ -252,6 +280,9 @@ export class MonteCarlo {
   readonly sensitivityRunning = signal(false);
   readonly sensitivityResult = signal<{ label: string; successProbability: number; isBase: boolean }[] | null>(null);
 
+  readonly longevityRunning = signal(false);
+  readonly longevityResult = signal<{ age: number; successProbability: number; isBase: boolean }[] | null>(null);
+
   // Percentile fan across trials, plus the deterministic flat-rate projection for reference.
   // The deterministic run reuses the same engine and the same after-tax basis as the trial
   // percentiles, so the two are directly comparable.
@@ -326,7 +357,7 @@ export class MonteCarlo {
           accounts, MonteCarlo.SENSITIVITY_TRIALS, seed + 1, useGuardrail,
         ),
       ]);
-      const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+      const pct = (n: number) => `${Math.round(n * 100)}%`;
       this.sensitivityResult.set([
         { label: `${pct(scenario.assumedReturnRate - 0.01)} return`, successProbability: low.successProbability, isBase: false },
         { label: `${pct(scenario.assumedReturnRate)} return (as run above)`, successProbability: mainResult.successProbability, isBase: true },
@@ -336,6 +367,37 @@ export class MonteCarlo {
       this.error.set(err instanceof Error ? err.message : 'Sensitivity run failed.');
     } finally {
       this.sensitivityRunning.set(false);
+    }
+  }
+
+  async runLongevity(): Promise<void> {
+    const mainResult = this.result();
+    if (!mainResult) return;
+    this.longevityRunning.set(true);
+    const scenario = this.state.scenario();
+    const accounts = this.state.accounts();
+    const useGuardrail = this.resultUsedGuardrail();
+    const seed = Date.now();
+    try {
+      const targetAges = [90, 95, 100];
+      const results = await Promise.all(targetAges.map(age => 
+        age === scenario.lifeExpectancy 
+          ? mainResult 
+          : runMonteCarloSmoothIncomeTargetAsync(
+              { ...scenario, lifeExpectancy: age },
+              accounts, MonteCarlo.SENSITIVITY_TRIALS, seed + age, useGuardrail
+            )
+      ));
+      
+      this.longevityResult.set(results.map((res, i) => ({
+        age: targetAges[i],
+        successProbability: res.successProbability,
+        isBase: targetAges[i] === scenario.lifeExpectancy
+      })));
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Longevity run failed.');
+    } finally {
+      this.longevityRunning.set(false);
     }
   }
 

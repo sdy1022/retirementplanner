@@ -51,8 +51,12 @@ export interface MonteCarloResult {
   // tiers, so this reports trigger frequency/duration rather than cut-size buckets.
   guardrailStats?: {
     triggeredProbability: number;
+    meanYearsInCutMode: number;
     medianYearsInCutMode: number;
     p90YearsInCutMode: number;
+    meanConsecutiveCutYears: number;
+    meanConsumptionRealization: number;
+    p10ConsumptionRealization: number;
   };
   // Magnitude of the shortfall among trials that failed (undefined when every trial
   // succeeded) — turns a bare failure count into a sense of how bad a typical failure is.
@@ -84,7 +88,9 @@ export function runMonteCarloSmoothIncomeTarget(
   const ages: number[] = [];
   const successFlags: boolean[] = new Array(trials);
   const yearsInCutMode: number[] = new Array(trials);
+  const maxConsecutiveCuts: number[] = new Array(trials);
   const totalShortfalls: number[] = new Array(trials);
+  const consumptionRealizations: number[] = new Array(trials);
   let successes = 0;
   for (let i = 0; i < trials; i++) {
     const trial = runTrial();
@@ -93,10 +99,12 @@ export function runMonteCarloSmoothIncomeTarget(
     assetsPerTrial[i] = trial.assetsByYear;
     successFlags[i] = trial.success;
     yearsInCutMode[i] = trial.yearsInCutMode;
+    maxConsecutiveCuts[i] = trial.maxConsecutiveCuts;
     totalShortfalls[i] = trial.totalShortfall;
+    consumptionRealizations[i] = trial.consumptionRealization;
     if (i === 0) ages.push(...trial.ages);
   }
-  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, totalShortfalls, useGuardrail);
+  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, maxConsecutiveCuts, totalShortfalls, consumptionRealizations, useGuardrail);
 }
 
 // Same simulation, but yields the main thread between chunks so the browser can keep
@@ -115,7 +123,9 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
   const ages: number[] = [];
   const successFlags: boolean[] = new Array(trials);
   const yearsInCutMode: number[] = new Array(trials);
+  const maxConsecutiveCuts: number[] = new Array(trials);
   const totalShortfalls: number[] = new Array(trials);
+  const consumptionRealizations: number[] = new Array(trials);
   let successes = 0;
   for (let done = 0; done < trials; ) {
     const chunkEnd = Math.min(trials, done + TRIALS_PER_CHUNK);
@@ -126,13 +136,15 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
       assetsPerTrial[done] = trial.assetsByYear;
       successFlags[done] = trial.success;
       yearsInCutMode[done] = trial.yearsInCutMode;
+      maxConsecutiveCuts[done] = trial.maxConsecutiveCuts;
       totalShortfalls[done] = trial.totalShortfall;
+      consumptionRealizations[done] = trial.consumptionRealization;
       if (done === 0) ages.push(...trial.ages);
     }
     onProgress?.(done);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
-  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, totalShortfalls, useGuardrail);
+  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, maxConsecutiveCuts, totalShortfalls, consumptionRealizations, useGuardrail);
 }
 
 interface TrialOutcome {
@@ -145,10 +157,12 @@ interface TrialOutcome {
   // Number of simulated years the guardrail cut living expenses in this trial (0 when the
   // guardrail wasn't used, or simply never triggered).
   yearsInCutMode: number;
+  maxConsecutiveCuts: number;
   // Sum of every year's shortfall (dollars of expenses/taxes the plan couldn't fund) —
   // near-zero for successful trials by construction (success requires shortfall <= 0.01
   // every year), meaningful for failed trials.
   totalShortfall: number;
+  consumptionRealization: number;
 }
 
 // Resolves the concrete plan once (strategy search, spending order) and returns a closure
@@ -193,6 +207,7 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
   const afterTaxAssets = (y: YearResult): number => afterTaxAssetsForYear(y, residualRate, gainsRate);
 
   const rng = createSeededRng(seed);
+  const plannedConsumption = base.years.reduce((sum, y) => sum + y.livingExpenses, 0);
 
   return () => {
     // Fresh sampler per trial: draws from the shared rng stream (so the overall sequence
@@ -206,10 +221,18 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
     // its decisions — lets the trial report guardrail trigger frequency/duration alongside
     // the success rate (see MonteCarloResult.guardrailStats).
     let cutYearCount = 0;
+    let maxConsecutiveCuts = 0;
+    let currentConsecutiveCuts = 0;
     const guardrail = rawGuardrail
       ? (params: { age: number; beginningAssets: number }) => {
           const decision = rawGuardrail(params);
-          if (decision.livingExpenseMultiplier < 1) cutYearCount++;
+          if (decision.livingExpenseMultiplier < 1) {
+            cutYearCount++;
+            currentConsecutiveCuts++;
+            if (currentConsecutiveCuts > maxConsecutiveCuts) maxConsecutiveCuts = currentConsecutiveCuts;
+          } else {
+            currentConsecutiveCuts = 0;
+          }
           return decision;
         }
       : undefined;
@@ -243,13 +266,16 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       sblocTaxFunding: scenario.sblocTaxFunding,
     });
     const last = years.at(-1);
+    const actualConsumption = years.reduce((sum, y) => sum + y.expensesFromSs + y.expensesFromRmd + y.expensesFromTraditional + y.expensesFromBrokerage + y.expensesFromRoth, 0);
     return {
       success: years.every((y) => y.shortfall <= 0.01),
       afterTaxEndingAssets: last ? afterTaxAssets(last) : 0,
       assetsByYear: years.map(afterTaxAssets),
       ages: years.map((y) => y.age),
       yearsInCutMode: cutYearCount,
+      maxConsecutiveCuts,
       totalShortfall: years.reduce((sum, y) => sum + Math.max(0, y.shortfall), 0),
+      consumptionRealization: plannedConsumption > 0 ? actualConsumption / plannedConsumption : 1,
     };
   };
 }
@@ -272,11 +298,12 @@ function summarize(
   ages: number[],
   successFlags: boolean[],
   yearsInCutMode: number[],
+  maxConsecutiveCuts: number[],
   totalShortfalls: number[],
+  consumptionRealizations: number[],
   useGuardrail: boolean,
 ): MonteCarloResult {
   const sorted = [...endingAssets].sort((a, b) => a - b);
-  // Transpose trials × years into per-age distributions for the fan chart
   const assetsByAge = ages.map((age, yearIndex) => {
     const atAge = assetsPerTrial.map((trial) => trial[yearIndex]).sort((a, b) => a - b);
     return { age, ...percentilesOf(atAge) };
@@ -286,10 +313,18 @@ function summarize(
   if (useGuardrail) {
     const triggered = yearsInCutMode.filter((y) => y > 0);
     const triggeredSorted = [...triggered].sort((a, b) => a - b);
+    const triggeredConsecutive = maxConsecutiveCuts.filter((_, i) => yearsInCutMode[i] > 0);
+    
+    const sortedConsumption = [...consumptionRealizations].sort((a, b) => a - b);
+
     guardrailStats = {
       triggeredProbability: triggered.length / yearsInCutMode.length,
+      meanYearsInCutMode: triggered.length ? triggered.reduce((a, b) => a + b, 0) / triggered.length : 0,
       medianYearsInCutMode: triggeredSorted.length ? percentileOf(triggeredSorted, 0.5) : 0,
       p90YearsInCutMode: triggeredSorted.length ? percentileOf(triggeredSorted, 0.9) : 0,
+      meanConsecutiveCutYears: triggeredConsecutive.length ? triggeredConsecutive.reduce((a, b) => a + b, 0) / triggeredConsecutive.length : 0,
+      meanConsumptionRealization: sortedConsumption.reduce((a, b) => a + b, 0) / sortedConsumption.length,
+      p10ConsumptionRealization: percentileOf(sortedConsumption, 0.1),
     };
   }
 
