@@ -110,4 +110,48 @@ describe('monte-carlo', () => {
     const withG = runMonteCarloSmoothIncomeTarget(wellFundedScenario, wellFundedAccounts, 500, 21, true);
     expect(withG.successProbability).toBeGreaterThanOrEqual(without.successProbability);
   });
+
+  it('reports guardrailStats only when the guardrail was used, and it reflects real trigger activity for a marginal plan', () => {
+    const marginalScenario: Scenario = { ...wellFundedScenario, annualLivingExpenses: 70000 };
+    const marginalAccounts = [
+      { type: 'traditional_401k' as const, balance: 1400000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 300000, snapshotDate: '2026-01-01' },
+    ];
+
+    const without = runMonteCarloSmoothIncomeTarget(marginalScenario, marginalAccounts, 500, 11, false);
+    expect(without.guardrailStats).toBeUndefined();
+
+    const withG = runMonteCarloSmoothIncomeTarget(marginalScenario, marginalAccounts, 500, 11, true);
+    expect(withG.guardrailStats).toBeDefined();
+    expect(withG.guardrailStats!.triggeredProbability).toBeGreaterThan(0);
+    expect(withG.guardrailStats!.triggeredProbability).toBeLessThanOrEqual(1);
+    expect(withG.guardrailStats!.medianYearsInCutMode).toBeGreaterThan(0);
+    expect(withG.guardrailStats!.p90YearsInCutMode).toBeGreaterThanOrEqual(withG.guardrailStats!.medianYearsInCutMode);
+  });
+
+  it('reports failureStats with a positive median shortfall when some trials fail, and omits it when none do', () => {
+    // Overfunded well past any plausible bad-market path, so every trial should succeed.
+    const overfundedAccounts = [
+      { type: 'traditional_401k' as const, balance: 20000000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 5000000, snapshotDate: '2026-01-01' },
+    ];
+    const overfunded = runMonteCarloSmoothIncomeTarget(wellFundedScenario, overfundedAccounts, 500, 7);
+    expect(overfunded.successProbability).toBe(1);
+    expect(overfunded.failureStats).toBeUndefined();
+
+    const thinAccounts = [
+      { type: 'traditional_401k' as const, balance: 300000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage' as const, balance: 20000, snapshotDate: '2026-01-01' },
+    ];
+    const thin = runMonteCarloSmoothIncomeTarget(
+      { ...wellFundedScenario, annualLivingExpenses: 80000 },
+      thinAccounts,
+      500,
+      7,
+    );
+    expect(thin.successProbability).toBeLessThan(1);
+    expect(thin.failureStats).toBeDefined();
+    expect(thin.failureStats!.medianShortfall).toBeGreaterThan(0);
+    expect(thin.failureStats!.p90Shortfall).toBeGreaterThanOrEqual(thin.failureStats!.medianShortfall);
+  });
 });

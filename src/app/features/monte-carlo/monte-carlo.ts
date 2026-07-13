@@ -89,7 +89,10 @@ import { LocalStateService } from '../../core/services/local-state.service';
               <div class="mc-loading"><mat-spinner diameter="24" /> <span>Simulating market paths… {{ progress() | number }} / {{ trials | number }}</span></div>
             }
             @if (result()) {
-              <button mat-button (click)="exportMonteCarloCsv()" id="export-mc-csv-btn" class="mc-export-btn">📥 Export Monte Carlo CSV</button>
+              <span class="export-group">
+                <button mat-button (click)="exportMonteCarloCsv()" id="export-mc-csv-btn" class="mc-export-btn">📥 Export CSV</button>
+                <button mat-button (click)="printReport()" id="print-mc-pdf-btn" class="mc-export-btn">🖨️ Print PDF</button>
+              </span>
             }
             @if (error()) {
               <p class="strategy-note mc-error">⚠️ {{ error() }}</p>
@@ -104,13 +107,74 @@ import { LocalStateService } from '../../core/services/local-state.service';
         <mat-card>
           <mat-card-header><mat-card-title>Outcome Distribution {{ resultUsedGuardrail() ? '(adaptive spending on)' : '(fixed plan, no adaptation)' }}</mat-card-title></mat-card-header>
           <mat-card-content>
-            <div class="metric"><span>Probability the plan never runs short through age {{ finalAge() }}</span><strong>{{ mc.successProbability * 100 | number: '1.1-1' }}%</strong></div>
+            <div class="metric"><span>Model success rate through age {{ finalAge() }}</span><strong>{{ mc.successProbability * 100 | number: '1.0-0' }}%</strong></div>
+            <p class="strategy-note mc-disclaimer">
+              This is a model-conditional success rate, not a calibrated real-world probability. It assumes a single
+              asset class (S&amp;P 500), fixed 3% inflation, a fixed strategy that only adapts via the guardrail below
+              (if enabled), and a fixed life expectancy. Depending on assumptions not yet modeled — asset allocation,
+              inflation variability, longevity, long-term care — the realistic range could differ by roughly 10
+              percentage points or more. Use this number to compare strategies against each other and to stress-test
+              a plan, not as a literal probability of success.
+            </p>
+            @if (resultUsedGuardrail() && mc.guardrailStats; as gr) {
+              <div class="metric sub guardrail-stat">
+                <span>Guardrail triggered in this many trials</span>
+                <strong>{{ gr.triggeredProbability * 100 | number: '1.0-0' }}%</strong>
+              </div>
+              <p class="strategy-note mc-sub-note">
+                Among trials where it triggered, the plan spent a median of {{ gr.medianYearsInCutMode }} year(s) in
+                cut mode (10% spending cut, worst 10% of trials: {{ gr.p90YearsInCutMode }} year(s)). The current
+                guardrail only supports one fixed cut size — this reports how often and how long it was active, not
+                graduated severity tiers.
+              </p>
+            }
+            @if (mc.failureStats; as fs) {
+              <div class="metric sub failure-stat">
+                <span>Among failed trials, typical lifetime shortfall</span>
+                <strong>{{ fs.medianShortfall | currency: 'USD':'symbol':'1.0-0' }}</strong>
+              </div>
+              <p class="strategy-note mc-sub-note">
+                Worst 10% of failed trials fell short by {{ fs.p90Shortfall | currency: 'USD':'symbol':'1.0-0' }} or
+                more — a failed trial isn't necessarily a near-miss.
+              </p>
+            }
             <div class="metric sub"><span>Mean after-tax ending assets</span><strong>{{ mc.meanEndingAssets | currency }}</strong></div>
             <div class="metric sub"><span>10th percentile (bad markets)</span><strong>{{ mc.endingAssetsPercentiles.p10 | currency }}</strong></div>
             <div class="metric sub"><span>25th percentile</span><strong>{{ mc.endingAssetsPercentiles.p25 | currency }}</strong></div>
             <div class="metric sub"><span>Median (50th percentile)</span><strong>{{ mc.endingAssetsPercentiles.p50 | currency }}</strong></div>
             <div class="metric sub"><span>75th percentile</span><strong>{{ mc.endingAssetsPercentiles.p75 | currency }}</strong></div>
             <div class="metric sub"><span>90th percentile (good markets)</span><strong>{{ mc.endingAssetsPercentiles.p90 | currency }}</strong></div>
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <section class="mc-sensitivity">
+        <mat-card>
+          <mat-card-header><mat-card-title>Return-Rate Sensitivity</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <p class="strategy-note">
+              Re-runs the same plan at ±1 percentage point around your assumed
+              {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% return (smaller trial count, so results are
+              directionally reliable but noisier than the main run above) to show how much the model success rate
+              hinges on that single assumption.
+            </p>
+            @if (!sensitivityResult()) {
+              <button mat-stroked-button [disabled]="sensitivityRunning()" (click)="runSensitivity()">
+                {{ sensitivityRunning() ? 'Running…' : 'Show return-rate sensitivity' }}
+              </button>
+            } @else {
+              <table class="sensitivity-table">
+                <thead><tr><th>Assumed return</th><th>Model success rate</th></tr></thead>
+                <tbody>
+                  @for (row of sensitivityResult(); track row.label) {
+                    <tr [class.current]="row.isBase">
+                      <td>{{ row.label }}</td>
+                      <td>{{ row.successProbability * 100 | number: '1.0-0' }}%</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
           </mat-card-content>
         </mat-card>
       </section>
@@ -133,8 +197,10 @@ import { LocalStateService } from '../../core/services/local-state.service';
     }
   `,
   styles: `
-    .mc-intro, .mc-summary, .mc-chart { margin-bottom: 20px; }
+    .mc-intro, .mc-summary, .mc-chart, .mc-sensitivity { margin-bottom: 20px; }
     .strategy-note { margin: 0 0 14px; padding: 10px 12px; background: #eef4fb; border-radius: 6px; font-size: 0.92rem; line-height: 1.5; color: #33475b; }
+    .mc-disclaimer { margin-top: 4px; }
+    .mc-sub-note { font-size: 0.85rem; margin: -4px 0 12px 14px; }
     .mc-loading { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: #5a6b7c; font-size: 0.92rem; }
     .mc-error { background: #fdecea; color: #b71c1c; }
     .guardrail-toggle { margin: 0 0 14px; font-size: 0.92rem; }
@@ -150,6 +216,19 @@ import { LocalStateService } from '../../core/services/local-state.service';
     .metric:last-child { border-bottom: 0; }
     .mc-chart mat-card-content { min-height: 380px; }
     .mc-export-btn { margin-left: 10px; font-size: 0.85rem; text-transform: none; }
+    .export-group { display: inline-flex; }
+    .sensitivity-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .sensitivity-table th, .sensitivity-table td { padding: 8px 12px; border: 1px solid #dde5ec; text-align: left; }
+    .sensitivity-table thead th { background: #f2f6fa; }
+    .sensitivity-table tr.current { background: #eef4fb; font-weight: 600; }
+    @media print {
+      button, .guardrail-toggle, .guardrail-example, .mc-loading, .mc-error, .export-group { display: none !important; }
+      mat-card { box-shadow: none !important; border: 1px solid #ddd; margin-bottom: 24px; page-break-inside: avoid; }
+      .mc-intro, .mc-summary, .mc-chart, .mc-sensitivity { display: block; }
+      .mc-summary { page-break-inside: avoid; }
+      .mc-chart { page-break-inside: avoid; page-break-before: auto; }
+      .mc-sensitivity { page-break-inside: avoid; }
+    }
   `,
 })
 export class MonteCarlo {
@@ -165,6 +244,13 @@ export class MonteCarlo {
   readonly error = signal<string | null>(null);
   readonly isSmoothIncomeTarget = computed(() => this.state.scenario().rothConversionStrategy.mode === 'smooth-income-target');
   readonly finalAge = computed(() => this.result()?.assetsByAge.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
+
+  // Smaller trial count than the main run — sensitivity is meant to be a quick, directional
+  // check ("how much does 87% move if the return assumption is off by a point?"), not a
+  // second full-precision run.
+  private static readonly SENSITIVITY_TRIALS = 2000;
+  readonly sensitivityRunning = signal(false);
+  readonly sensitivityResult = signal<{ label: string; successProbability: number; isBase: boolean }[] | null>(null);
 
   // Percentile fan across trials, plus the deterministic flat-rate projection for reference.
   // The deterministic run reuses the same engine and the same after-tax basis as the trial
@@ -199,6 +285,7 @@ export class MonteCarlo {
     this.running.set(true);
     this.progress.set(0);
     this.error.set(null);
+    this.sensitivityResult.set(null);
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
     const useGuardrail = this.useGuardrail;
@@ -213,6 +300,42 @@ export class MonteCarlo {
       this.error.set(err instanceof Error ? err.message : 'Monte Carlo simulation failed.');
     } finally {
       this.running.set(false);
+    }
+  }
+
+  // Re-runs the plan at ±1 percentage point around the assumed return rate, at a reduced
+  // trial count, so the user can see how much the headline success rate hinges on that one
+  // assumption without editing the scenario and re-running by hand. Reuses the main run's
+  // result for the base case rather than recomputing it.
+  async runSensitivity(): Promise<void> {
+    const mainResult = this.result();
+    if (!mainResult) return;
+    this.sensitivityRunning.set(true);
+    const scenario = this.state.scenario();
+    const accounts = this.state.accounts();
+    const useGuardrail = this.resultUsedGuardrail();
+    const seed = Date.now();
+    try {
+      const [low, high] = await Promise.all([
+        runMonteCarloSmoothIncomeTargetAsync(
+          { ...scenario, assumedReturnRate: scenario.assumedReturnRate - 0.01 },
+          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail,
+        ),
+        runMonteCarloSmoothIncomeTargetAsync(
+          { ...scenario, assumedReturnRate: scenario.assumedReturnRate + 0.01 },
+          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed + 1, useGuardrail,
+        ),
+      ]);
+      const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+      this.sensitivityResult.set([
+        { label: `${pct(scenario.assumedReturnRate - 0.01)} return`, successProbability: low.successProbability, isBase: false },
+        { label: `${pct(scenario.assumedReturnRate)} return (as run above)`, successProbability: mainResult.successProbability, isBase: true },
+        { label: `${pct(scenario.assumedReturnRate + 0.01)} return`, successProbability: high.successProbability, isBase: false },
+      ]);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Sensitivity run failed.');
+    } finally {
+      this.sensitivityRunning.set(false);
     }
   }
 
@@ -238,6 +361,19 @@ export class MonteCarlo {
       ['strategyMode', scenario.rothConversionStrategy.mode],
       ['exportedAt', new Date().toISOString()],
     ];
+    if (mc.guardrailStats) {
+      metaRows.push(
+        ['guardrailTriggeredProbability', mc.guardrailStats.triggeredProbability],
+        ['guardrailMedianYearsInCutMode', mc.guardrailStats.medianYearsInCutMode],
+        ['guardrailP90YearsInCutMode', mc.guardrailStats.p90YearsInCutMode],
+      );
+    }
+    if (mc.failureStats) {
+      metaRows.push(
+        ['failureMedianShortfall', mc.failureStats.medianShortfall],
+        ['failureP90Shortfall', mc.failureStats.p90Shortfall],
+      );
+    }
 
     // Deterministic comparison line on the same after-tax basis as the fan chart
     const residualRate = scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
@@ -266,5 +402,10 @@ export class MonteCarlo {
 
     const content = BOM + lines.join('\r\n') + '\r\n';
     downloadFile(exportFilename('monte-carlo', 'csv'), content, 'text/csv;charset=utf-8');
+  }
+
+  /** Trigger browser native print to generate PDF */
+  printReport(): void {
+    window.print();
   }
 }

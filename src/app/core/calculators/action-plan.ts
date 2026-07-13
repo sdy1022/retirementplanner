@@ -5,8 +5,10 @@ import { BRACKET_INFLATION_RATE, getTaxTable } from './tax-tables';
 export interface ActionStep {
   age: number;
   action: string;
+  livingExpenses: string;
   marginalBracket: string;
   totalTax: string;
+  irmaa: string;
   fundingSource: string;
   status: 'info' | 'success' | 'warning' | 'danger';
 }
@@ -44,10 +46,13 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
     
     let actionStr = '';
     const marginalBracketStr = `${Math.round(year.marginalRate * 100)}%`;
-    let totalTaxStr = year.totalTax > 0 ? `$${Math.round(year.totalTax).toLocaleString()}` : '$0';
-    if (year.irmaa > 0) {
-      totalTaxStr += ` (+ $${Math.round(year.irmaa).toLocaleString()} IRMAA)`;
-    }
+    const totalTaxStr = year.totalTax > 0 ? `$${Math.round(year.totalTax).toLocaleString()}` : '$0';
+    
+    const baseMedicare = year.age >= 65 ? 202.90 * 12 * (filingStatus === 'married_filing_jointly' ? 2 : 1) * inflationFactor : 0;
+    const totalMedicare = year.irmaa + baseMedicare;
+    const irmaaStr = totalMedicare > 0 ? `$${Math.round(totalMedicare).toLocaleString()}` : '-';
+    
+    const livingExpensesStr = year.livingExpenses > 0 ? `$${Math.round(year.livingExpenses).toLocaleString()}` : '-';
     
     const fundingSourceStr = fundingBreakdown(year);
     let status: ActionStep['status'] = 'info';
@@ -107,8 +112,10 @@ export function generateActionPlan(result: ScenarioResult, filingStatus: FilingS
       steps.push({
         age: year.age,
         action: actionStr,
+        livingExpenses: livingExpensesStr,
         marginalBracket: marginalBracketStr,
         totalTax: totalTaxStr,
+        irmaa: irmaaStr,
         fundingSource: fundingSourceStr,
         status
       });

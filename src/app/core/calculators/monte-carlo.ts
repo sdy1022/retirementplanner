@@ -36,12 +36,30 @@ export function afterTaxAssetsForYear(year: YearResult, residualRate: number, ga
 export interface MonteCarloResult {
   trials: number;
   // Fraction of trials that funded every year's expenses and taxes without a shortfall
-  // through life expectancy — i.e. the plan never ran out of money.
+  // through life expectancy — i.e. the plan never ran out of money. This is a
+  // model-conditional success rate (single asset class, fixed inflation, fixed lifespan,
+  // fixed strategy), not a calibrated real-world probability — see the disclaimer shown
+  // alongside it in the UI.
   successProbability: number;
   meanEndingAssets: number;
   endingAssetsPercentiles: MonteCarloPercentiles;
   // Percentile bands of total assets by age across all trials — the fan chart data
   assetsByAge: MonteCarloAgePercentiles[];
+  // How often and how long the adaptive-spending guardrail actually cut spending across
+  // trials. Undefined when the guardrail wasn't used for this run. The current guardrail
+  // has a single fixed cut size (10%, see spending-guardrail.ts), not graduated severity
+  // tiers, so this reports trigger frequency/duration rather than cut-size buckets.
+  guardrailStats?: {
+    triggeredProbability: number;
+    medianYearsInCutMode: number;
+    p90YearsInCutMode: number;
+  };
+  // Magnitude of the shortfall among trials that failed (undefined when every trial
+  // succeeded) — turns a bare failure count into a sense of how bad a typical failure is.
+  failureStats?: {
+    medianShortfall: number;
+    p90Shortfall: number;
+  };
 }
 
 // Runs the plan's resolved smooth-income-target strategy through many random annual-return
@@ -64,15 +82,21 @@ export function runMonteCarloSmoothIncomeTarget(
   const endingAssets: number[] = new Array(trials);
   const assetsPerTrial: number[][] = new Array(trials);
   const ages: number[] = [];
+  const successFlags: boolean[] = new Array(trials);
+  const yearsInCutMode: number[] = new Array(trials);
+  const totalShortfalls: number[] = new Array(trials);
   let successes = 0;
   for (let i = 0; i < trials; i++) {
     const trial = runTrial();
     if (trial.success) successes++;
     endingAssets[i] = trial.afterTaxEndingAssets;
     assetsPerTrial[i] = trial.assetsByYear;
+    successFlags[i] = trial.success;
+    yearsInCutMode[i] = trial.yearsInCutMode;
+    totalShortfalls[i] = trial.totalShortfall;
     if (i === 0) ages.push(...trial.ages);
   }
-  return summarize(endingAssets, successes, assetsPerTrial, ages);
+  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, totalShortfalls, useGuardrail);
 }
 
 // Same simulation, but yields the main thread between chunks so the browser can keep
@@ -89,6 +113,9 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
   const endingAssets: number[] = new Array(trials);
   const assetsPerTrial: number[][] = new Array(trials);
   const ages: number[] = [];
+  const successFlags: boolean[] = new Array(trials);
+  const yearsInCutMode: number[] = new Array(trials);
+  const totalShortfalls: number[] = new Array(trials);
   let successes = 0;
   for (let done = 0; done < trials; ) {
     const chunkEnd = Math.min(trials, done + TRIALS_PER_CHUNK);
@@ -97,12 +124,15 @@ export async function runMonteCarloSmoothIncomeTargetAsync(
       if (trial.success) successes++;
       endingAssets[done] = trial.afterTaxEndingAssets;
       assetsPerTrial[done] = trial.assetsByYear;
+      successFlags[done] = trial.success;
+      yearsInCutMode[done] = trial.yearsInCutMode;
+      totalShortfalls[done] = trial.totalShortfall;
       if (done === 0) ages.push(...trial.ages);
     }
     onProgress?.(done);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
-  return summarize(endingAssets, successes, assetsPerTrial, ages);
+  return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, totalShortfalls, useGuardrail);
 }
 
 interface TrialOutcome {
@@ -112,6 +142,13 @@ interface TrialOutcome {
   // basis as afterTaxEndingAssets, just computed for every year instead of only the last
   assetsByYear: number[];
   ages: number[];
+  // Number of simulated years the guardrail cut living expenses in this trial (0 when the
+  // guardrail wasn't used, or simply never triggered).
+  yearsInCutMode: number;
+  // Sum of every year's shortfall (dollars of expenses/taxes the plan couldn't fund) —
+  // near-zero for successful trials by construction (success requires shortfall <= 0.01
+  // every year), meaningful for failed trials.
+  totalShortfall: number;
 }
 
 // Resolves the concrete plan once (strategy search, spending order) and returns a closure
@@ -164,7 +201,18 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
     // needs the same treatment — a fresh instance per trial so "currently in cut mode"
     // doesn't leak across trial boundaries either.
     const sampleReturn = createReturnSampler(rng, scenario.assumedReturnRate);
-    const guardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
+    const rawGuardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
+    // Records which simulated years the guardrail actually cut spending, without changing
+    // its decisions — lets the trial report guardrail trigger frequency/duration alongside
+    // the success rate (see MonteCarloResult.guardrailStats).
+    let cutYearCount = 0;
+    const guardrail = rawGuardrail
+      ? (params: { age: number; beginningAssets: number }) => {
+          const decision = rawGuardrail(params);
+          if (decision.livingExpenseMultiplier < 1) cutYearCount++;
+          return decision;
+        }
+      : undefined;
     const years = simulateConversionStrategy({
       accounts,
       strategy: resolvedStrategy,
@@ -200,6 +248,8 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       afterTaxEndingAssets: last ? afterTaxAssets(last) : 0,
       assetsByYear: years.map(afterTaxAssets),
       ages: years.map((y) => y.age),
+      yearsInCutMode: cutYearCount,
+      totalShortfall: years.reduce((sum, y) => sum + Math.max(0, y.shortfall), 0),
     };
   };
 }
@@ -209,18 +259,56 @@ function percentilesOf(sorted: number[]): MonteCarloPercentiles {
   return { p10: at(0.1), p25: at(0.25), p50: at(0.5), p75: at(0.75), p90: at(0.9) };
 }
 
-function summarize(endingAssets: number[], successes: number, assetsPerTrial: number[][], ages: number[]): MonteCarloResult {
+// Single-percentile helper for the guardrail/failure summaries below, which only need one
+// cut point each rather than the full five-point MonteCarloPercentiles shape.
+function percentileOf(sorted: number[], p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+function summarize(
+  endingAssets: number[],
+  successes: number,
+  assetsPerTrial: number[][],
+  ages: number[],
+  successFlags: boolean[],
+  yearsInCutMode: number[],
+  totalShortfalls: number[],
+  useGuardrail: boolean,
+): MonteCarloResult {
   const sorted = [...endingAssets].sort((a, b) => a - b);
   // Transpose trials × years into per-age distributions for the fan chart
   const assetsByAge = ages.map((age, yearIndex) => {
     const atAge = assetsPerTrial.map((trial) => trial[yearIndex]).sort((a, b) => a - b);
     return { age, ...percentilesOf(atAge) };
   });
+
+  let guardrailStats: MonteCarloResult['guardrailStats'];
+  if (useGuardrail) {
+    const triggered = yearsInCutMode.filter((y) => y > 0);
+    const triggeredSorted = [...triggered].sort((a, b) => a - b);
+    guardrailStats = {
+      triggeredProbability: triggered.length / yearsInCutMode.length,
+      medianYearsInCutMode: triggeredSorted.length ? percentileOf(triggeredSorted, 0.5) : 0,
+      p90YearsInCutMode: triggeredSorted.length ? percentileOf(triggeredSorted, 0.9) : 0,
+    };
+  }
+
+  let failureStats: MonteCarloResult['failureStats'];
+  const failedShortfalls = totalShortfalls.filter((_, i) => !successFlags[i]).sort((a, b) => a - b);
+  if (failedShortfalls.length) {
+    failureStats = {
+      medianShortfall: percentileOf(failedShortfalls, 0.5),
+      p90Shortfall: percentileOf(failedShortfalls, 0.9),
+    };
+  }
+
   return {
     trials: sorted.length,
     successProbability: successes / sorted.length,
     meanEndingAssets: sorted.reduce((sum, v) => sum + v, 0) / sorted.length,
     endingAssetsPercentiles: percentilesOf(sorted),
     assetsByAge,
+    guardrailStats,
+    failureStats,
   };
 }

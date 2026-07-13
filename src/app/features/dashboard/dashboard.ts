@@ -144,8 +144,10 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
                 <tr>
                   <th>Age</th>
                   <th>Action</th>
+                  <th>Living Expenses</th>
                   <th>Marginal Bracket</th>
                   <th>Total Tax</th>
+                  <th>Medicare (Base + IRMAA)</th>
                   <th>Funding Source</th>
                 </tr>
               </thead>
@@ -154,8 +156,10 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
                   <tr [class]="'status-' + step.status">
                     <td><strong>{{ step.age }}</strong></td>
                     <td>{{ step.action }}</td>
+                    <td>{{ step.livingExpenses }}</td>
                     <td>{{ step.marginalBracket }}</td>
                     <td>{{ step.totalTax }}</td>
+                    <td>{{ step.irmaa }}</td>
                     <td>{{ step.fundingSource }}</td>
                   </tr>
                 }
