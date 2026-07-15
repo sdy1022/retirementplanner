@@ -19,6 +19,10 @@ export interface ConversionSimulationInput {
   stateTaxRate: number;
   annualLivingExpenses?: number;
   annualOtherIncome?: number;
+  annualPreTaxContribution?: number;
+  annualRothContribution?: number;
+  annualBrokerageContribution?: number;
+  employerMatch?: number;
   wageIncome?: number;
   retirementAge?: number;
   // Monthly benefit at the chosen claim age (already claiming-age-adjusted by the user)
@@ -136,14 +140,30 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // then Roth. All traditional slices are ordinary income, so they join the tax base before the
     // conversion decision and consume bracket room that would otherwise go to conversions.
     const expenseBaseAge = Math.floor(input.retirementAge ?? input.currentAge);
-    const livingExpenses = isRetired
-      ? roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, age - expenseBaseAge) * guardrailDecision.livingExpenseMultiplier)
-      : 0;
-    // RMD cash pays expenses first (after SS); only the unspent remainder is deposited to brokerage
-    const rmdSpentOnExpenses = Math.min(rmd, Math.max(0, livingExpenses - ssIncome));
-    const spendingNeed = Math.max(0, livingExpenses - ssIncome - rmd);
+    const livingExpenses = roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, Math.max(0, age - expenseBaseAge)) * guardrailDecision.livingExpenseMultiplier);
+    let availableWage = currentWage;
+    const actualPreTaxContrib = isRetired ? 0 : Math.min(availableWage, input.annualPreTaxContribution ?? 0);
+    availableWage -= actualPreTaxContrib;
 
-    const baseIncomeBeforeWithdrawals = currentWage + (input.annualOtherIncome ?? 0) + taxableSsEstimate + rmd;
+    const actualRothContrib = isRetired ? 0 : Math.min(availableWage, input.annualRothContribution ?? 0);
+    availableWage -= actualRothContrib;
+
+    const actualBrokerageContrib = isRetired ? 0 : Math.min(availableWage + (input.annualOtherIncome ?? 0), input.annualBrokerageContribution ?? 0);
+    const actualEmployerMatch = isRetired ? 0 : (input.employerMatch ?? 0);
+
+    const baseInflows = currentWage + (input.annualOtherIncome ?? 0) + ssIncome + rmd;
+    const baseOutflows = livingExpenses + actualPreTaxContrib + actualRothContrib + actualBrokerageContrib;
+    const netCash = baseInflows - baseOutflows;
+
+    let spendingNeed = 0;
+    let unspentCash = 0;
+    if (netCash < 0) {
+      spendingNeed = -netCash;
+    } else {
+      unspentCash = netCash;
+    }
+
+    const baseIncomeBeforeWithdrawals = currentWage - actualPreTaxContrib + (input.annualOtherIncome ?? 0) + taxableSsEstimate + rmd;
     const lowBracketGrossCeiling = ceilingForRate(LOW_BRACKET_HARVEST_RATE, filingStatus, taxYear, inflationFactor) + table.standardDeduction;
     const lowBracketRoom = Math.max(0, lowBracketGrossCeiling - baseIncomeBeforeWithdrawals);
     // 'brokerage-first' skips the low-bracket harvest so conversions get the bracket room instead
@@ -166,7 +186,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
     // Exact Social Security taxability via the provisional-income formula, now that all
     // non-SS ordinary income is known (below the 85% sizing estimate in low-income years)
-    const nonSsOrdinaryIncome = currentWage + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
+    const nonSsOrdinaryIncome = currentWage - actualPreTaxContrib + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
     let taxableSsIncome = roundCurrency(taxableSocialSecurity(ssIncome, nonSsOrdinaryIncome, filingStatus));
     let taxableIncome = roundCurrency(nonSsOrdinaryIncome + taxableSsIncome);
     // State (e.g. Indiana): flat rate on ordinary income, Social Security exempt,
@@ -202,16 +222,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // conversions themselves are exempt; penalty exceptions like 72(t)/rule-of-55 are not
     // modeled). Roth earnings withdrawals would also owe it, but Roth basis isn't tracked.
     const expensePenalty = age < 59.5 ? roundCurrency(0.1 * fromTraditional) : 0;
-    // Working years: wages cover their own taxes, so the plan is charged only the
-    // incremental tax the conversion adds on top of wage income.
-    let federalTax = isRetired
-      ? roundCurrency(fedOrdinaryTax(taxableIncome) + investmentFederalTax + expensePenalty)
-      : roundCurrency((conversion > 0
-          ? fedOrdinaryTax(taxableIncome) - fedOrdinaryTax(taxableIncome - conversion)
-          : 0) + investmentFederalTax + expensePenalty);
-    let stateTax = isRetired
-      ? roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax)
-      : roundCurrency((conversion > 0 ? conversion * input.stateTaxRate : 0) + capitalGainsStateTax + dividendStateTax);
+    // With explicit cash-flow modeling, wages no longer automatically "cover their own taxes."
+    // All income generates tax, which is paid from unspent cash flow before reducing the portfolio.
+    let federalTax = roundCurrency(fedOrdinaryTax(taxableIncome) + investmentFederalTax + expensePenalty);
+    let stateTax = roundCurrency(stateTaxableIncome * input.stateTaxRate + capitalGainsStateTax + dividendStateTax);
     let totalTax = roundCurrency(federalTax + stateTax);
     let marginalRate = getMarginalBracket(taxableIncome, filingStatus, taxYear, inflationFactor).rate;
 
@@ -225,9 +239,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const irmaa = age >= MEDICARE_AGE ? irmaaAnnualSurcharge(lookbackMagi, filingStatus, inflationFactor) : 0;
 
     traditionalBalance = Math.max(0, traditionalBalance - rmd - fromTraditional - conversion);
-    brokerageBalance = roundCurrency(brokerageBalance + rmd - rmdSpentOnExpenses - fromBrokerage);
-    // Withdrawals consume basis pro rata; unspent RMD cash deposits carry full basis
-    brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)) + rmd - rmdSpentOnExpenses);
+    brokerageBalance = roundCurrency(brokerageBalance - fromBrokerage);
+    brokerageBasis = roundCurrency(Math.max(0, brokerageBasis - fromBrokerage * (1 - brokerageGainFraction)));
 
     // SBLOC (Buy-Borrow-Die) tax funding: interest compounds on the outstanding loan every
     // year (never repaid — the estate settles it at death). Inside the window, the
@@ -246,8 +259,15 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       sblocDraw = roundCurrency(Math.min(conversionTax, totalTax + irmaa, ltvRoom));
       sblocLoanBalance = roundCurrency(sblocLoanBalance + sblocDraw);
     }
-
     const totalOutflow = roundCurrency(totalTax + irmaa - sblocDraw);
+
+    let unspentCashAfterTaxes = unspentCash;
+    let remainingTax = totalOutflow;
+
+    const taxPaidFromUnspent = Math.min(unspentCashAfterTaxes, remainingTax);
+    unspentCashAfterTaxes -= taxPaidFromUnspent;
+    remainingTax -= taxPaidFromUnspent;
+
     // Selling brokerage to pay taxes realizes gains pro-rata (same lot mix as any other
     // sale — not a basis-first fiction), and that gain triggers more capital-gains tax,
     // NIIT, and state tax, requiring a slightly larger sale. Solved by fixed-point
@@ -263,10 +283,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
         - cgTaxBase;
       return roundCurrency(fedDelta + gain * input.stateTaxRate);
     };
-    let sale = Math.min(brokerageBalance, totalOutflow);
-    if (paymentGainFraction > 0 && totalOutflow > 0) {
+    let sale = Math.min(brokerageBalance, remainingTax);
+    if (paymentGainFraction > 0 && remainingTax > 0) {
       for (let i = 0; i < 20; i++) {
-        const next = Math.min(brokerageBalance, roundCurrency(totalOutflow + paymentSaleTax(sale)));
+        const next = Math.min(brokerageBalance, roundCurrency(remainingTax + paymentSaleTax(sale)));
         if (Math.abs(next - sale) < 0.01) {
           sale = next;
           break;
@@ -284,7 +304,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       magi = roundCurrency(magi + saleGain);
       magiByAge.set(age, magi);
     }
-    const owed = roundCurrency(totalOutflow + saleTax);
+    const owed = roundCurrency(remainingTax + saleTax);
     let taxFromBrokerage = sale;
     let actualRothDeposit = conversion;
     let unpaidOutflow = 0;
@@ -384,11 +404,16 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const shortfall = roundCurrency(unpaidOutflow + unfundedExpenses);
 
     const growthRate = input.returnRateForYear ? input.returnRateForYear(age, age - startAge) : input.assumedReturnRate;
-    traditionalBalance = roundCurrency(traditionalBalance * (1 + growthRate));
-    rothBalance = roundCurrency(rothBalance * (1 + growthRate));
-    brokerageBalance = roundCurrency(brokerageBalance * (1 + growthRate));
+    const newTraditional = actualPreTaxContrib + actualEmployerMatch;
+    const newRoth = actualRothContrib;
+    const newBrokerage = actualBrokerageContrib + unspentCashAfterTaxes;
+
+    // Mid-year contribution growth: balances get full year growth, new additions get half
+    traditionalBalance = roundCurrency(traditionalBalance * (1 + growthRate) + newTraditional * (1 + growthRate * 0.5));
+    rothBalance = roundCurrency(rothBalance * (1 + growthRate) + newRoth * (1 + growthRate * 0.5));
+    brokerageBalance = roundCurrency(brokerageBalance * (1 + growthRate) + newBrokerage * (1 + growthRate * 0.5));
     // Reinvested dividends were taxed this year, so they add to basis (never taxed again)
-    brokerageBasis = Math.min(roundCurrency(brokerageBasis + dividends), brokerageBalance);
+    brokerageBasis = Math.min(roundCurrency(brokerageBasis + dividends + newBrokerage), brokerageBalance);
 
     results.push({
       age,
@@ -408,7 +433,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       livingExpenses,
       endingAssets: roundCurrency(traditionalBalance + rothBalance + brokerageBalance),
       expensesFromSs: roundCurrency(Math.min(ssIncome, livingExpenses)),
-      expensesFromRmd: roundCurrency(rmdSpentOnExpenses),
+      expensesFromRmd: roundCurrency(Math.min(rmd, Math.max(0, livingExpenses - ssIncome - currentWage))),
       expensesFromTraditional: roundCurrency(fromTraditional),
       expensesFromBrokerage: roundCurrency(fromBrokerage),
       expensesFromRoth: roundCurrency(fromRoth),

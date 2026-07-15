@@ -62,6 +62,11 @@ export interface Scenario {
   wageIncome: number;
   // Interest and non-qualified dividends taxed as ordinary income every year
   annualOtherIncome?: number;
+  // Pre-retirement annual contributions
+  annualPreTaxContribution?: number;
+  annualRothContribution?: number;
+  annualBrokerageContribution?: number;
+  employerMatch?: number;
   annualLivingExpenses: number;
   // Tax rate assumed on traditional dollars left at the end of the plan (heirs/liquidation);
   // drives the after-tax score that picks between conversion strategies. Defaults to 24%.

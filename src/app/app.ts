@@ -28,6 +28,10 @@ import { AuthService } from './core/services/auth.service';
           <mat-icon>query_stats</mat-icon>
           Monte Carlo
         </a>
+        <a mat-button routerLink="/tranche-planner" routerLinkActive="active-link">
+          <mat-icon>event_repeat</mat-icon>
+          Tranches
+        </a>
         <a mat-button href="/runningsteps_eng.html" target="_blank">
           <mat-icon>help</mat-icon>
           Help

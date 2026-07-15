@@ -1,0 +1,152 @@
+====================================================================
+ROTH CONVERSION TRANCHE PLANNER — USER MANUAL
+File: roth_tranche_planner.html
+====================================================================
+
+WHAT IT DOES
+--------------------------------------------------------------------
+Splits your annual Roth conversion into three scheduled tranches
+sized to fill the 22% federal bracket (MFJ) without spilling into
+24%, and flags an optional "bonus" tranche when QQQ/VOO is down 10%
+or more from its 52-week high (converting while depressed moves more
+shares per tax dollar).
+
+It is a single self-contained HTML file. Open it in any browser --
+no server, no install. Your inputs are saved in the browser
+(localStorage), so they are still there the next time you open it
+on the same machine and browser.
+
+THE ANNUAL RHYTHM: RUN IT THREE TIMES A YEAR
+--------------------------------------------------------------------
+The tool is designed around three check-ins. At each one you update
+a few fields, set the checkpoint dropdown, and read off the tranche
+amounts.
+
+  January  -> execute Tranche I
+  October  -> execute Tranche II
+  Mid-Dec  -> execute Tranche III
+
+--------------------------------------------------------------------
+CHECK-IN 1: JANUARY
+--------------------------------------------------------------------
+1. Section 01 -- fill in for the new tax year:
+   - 22% Bracket Ceiling: top of the MFJ 22% bracket (taxable
+     income). UPDATE THIS EVERY YEAR as the IRS adjusts brackets.
+   - Other Taxable Income: full-year salary + other known W-2
+     income, EXCLUDING bonus, with deductions already netted out
+     (i.e., this is taxable income, not gross).
+   - Bonus / Variable Comp Estimate: your best January guess.
+   - Target Annual Conversion: how much you want to convert this
+     year in total.
+
+2. Section 02 -- leave "Projected Full-Year Taxable Income" and
+   "Conversions Executed YTD" at 0. Set the checkpoint dropdown to
+   "January -- Tranche 1 only".
+
+3. Read the Tranche Schedule:
+   - Execute Tranche I now. It is sized off salary alone (bonus
+     ignored), so it is safe even in a zero-bonus year.
+   - Tranche II and III amounts shown in January are PREVIEWS only.
+     Do not execute them yet -- they get re-computed in the fall.
+
+--------------------------------------------------------------------
+CHECK-IN 2: OCTOBER
+--------------------------------------------------------------------
+1. Section 02:
+   - Projected Full-Year Taxable Income: your updated estimate of
+     the FULL YEAR (through Dec 31), now that the bonus is mostly
+     visible. Salary + confirmed bonus, EXCLUDING any Roth
+     conversions. Do NOT enter a literal year-to-date paystub
+     figure -- project it to year end.
+   - Conversions Executed YTD: what you actually converted in
+     Tranche I. (Leave 0 to assume it went exactly as planned.)
+   - Checkpoint: "October -- Tranche 2 true-up".
+
+2. Execute Tranche II at the amount shown.
+
+--------------------------------------------------------------------
+CHECK-IN 3: MID-DECEMBER
+--------------------------------------------------------------------
+1. Section 02:
+   - Projected Full-Year Taxable Income: final number -- at this
+     point it should be nearly exact.
+   - Conversions Executed YTD: total of Tranche I + Tranche II as
+     actually executed.
+   - Checkpoint: "December -- Tranche 3 final".
+
+2. Execute Tranche III. It closes the remaining bracket room with a
+   $200 safety buffer so a small estimate error doesn't tip you
+   into the 24% bracket.
+
+--------------------------------------------------------------------
+SECTION 03: DRAWDOWN CHECK (ANY TIME)
+--------------------------------------------------------------------
+Check this whenever the market drops -- it is independent of the
+Jan/Oct/Dec schedule.
+
+   - 52-Week High and Current Price: for QQQ or VOO, per share.
+   - Max Bonus Conversion: the largest EXTRA conversion you would
+     do on a dip. Keep roughly 25% of this amount available in
+     cash in your taxable tax-source pool to pay the tax on it.
+
+If the price is >= 10% below the 52-week high, a green "Bonus"
+tranche appears. It is optional and opportunistic. NOTE: the bonus
+tranche is taxable income like any other conversion -- the tool
+includes it in the over-ceiling check, so watch for the warning
+before executing both the bonus and Tranche III.
+
+--------------------------------------------------------------------
+READING THE OUTPUT
+--------------------------------------------------------------------
+Callout box (above the gauge):
+   - Red "Over ceiling" -- planned conversions + projected income
+     exceed the 22% bracket top by the amount shown. Trim Tranche
+     III (or skip the bonus tranche) before executing.
+   - "Drawdown trigger active / No drawdown trigger" -- status of
+     the 10% dip rule.
+
+Bracket Gauge:
+   - Bar segments left to right: ordinary income, T1, T2, T3, and
+     Bonus (green) if active. The red vertical line marked
+     "22%->24%" is the bracket ceiling -- nothing should cross it.
+
+Tranche Schedule statuses:
+   - OK    -- sized from current, confirmed numbers; safe to act on.
+   - WATCH -- a preview based on estimates; will be re-computed at a
+             later checkpoint.
+   - OVER  -- this tranche would breach the ceiling; reduce it.
+
+Footline: remaining bracket room right now, plus the sizing rules.
+
+--------------------------------------------------------------------
+HOW THE TRANCHES ARE SIZED (THE RULES)
+--------------------------------------------------------------------
+   Tranche I   = min(60% of target, 90% of salary-only room)
+   Tranche II  = January preview: 65% of the remainder, capped at
+                 90% of the room left after T1 (bonus estimate
+                 included). October: re-sized against your updated
+                 full-year projection.
+   Tranche III = whatever is left of the target, capped at the
+                 remaining room minus a $200 buffer.
+   Room math keeps a 10% safety margin throughout.
+
+--------------------------------------------------------------------
+EXECUTION RULES (per the plan this tool implements)
+--------------------------------------------------------------------
+   - All tranches converted IN-KIND (transfer shares, don't sell).
+   - Zero tax withholding on the conversion itself.
+   - Pay the tax from the taxable brokerage tax-source pool using
+     specific lot ID.
+
+--------------------------------------------------------------------
+LIMITATIONS
+--------------------------------------------------------------------
+   - Federal bracket only. Indiana's flat state tax applies on top
+     and is NOT modeled.
+   - Assumes MFJ filing status.
+   - Does not model IRMAA cliffs, NIIT, or capital-gains bracket
+     interactions -- if you are near an IRMAA threshold, check that
+     separately before executing.
+   - Inputs persist per browser/machine. Clearing browser data
+     resets them to the built-in defaults.
+====================================================================

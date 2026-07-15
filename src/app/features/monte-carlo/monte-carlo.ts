@@ -270,6 +270,7 @@ export class MonteCarlo {
   readonly running = signal(false);
   readonly progress = signal(0);
   readonly error = signal<string | null>(null);
+  private lastSeed = 0;
   readonly isSmoothIncomeTarget = computed(() => this.state.scenario().rothConversionStrategy.mode === 'smooth-income-target');
   readonly finalAge = computed(() => this.result()?.assetsByAge.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
 
@@ -321,8 +322,9 @@ export class MonteCarlo {
     const accounts = this.state.accounts();
     const useGuardrail = this.useGuardrail;
     try {
+      this.lastSeed = Date.now();
       const result = await runMonteCarloSmoothIncomeTargetAsync(
-        scenario, accounts, this.trials, Date.now(), useGuardrail,
+        scenario, accounts, this.trials, this.lastSeed, useGuardrail,
         (done) => this.progress.set(done),
       );
       this.result.set(result);
@@ -345,7 +347,7 @@ export class MonteCarlo {
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
     const useGuardrail = this.resultUsedGuardrail();
-    const seed = Date.now();
+    const seed = this.lastSeed || Date.now();
     try {
       const [low, high] = await Promise.all([
         runMonteCarloSmoothIncomeTargetAsync(
@@ -354,7 +356,7 @@ export class MonteCarlo {
         ),
         runMonteCarloSmoothIncomeTargetAsync(
           { ...scenario, assumedReturnRate: scenario.assumedReturnRate + 0.01 },
-          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed + 1, useGuardrail,
+          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail,
         ),
       ]);
       const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -377,7 +379,7 @@ export class MonteCarlo {
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
     const useGuardrail = this.resultUsedGuardrail();
-    const seed = Date.now();
+    const seed = this.lastSeed || Date.now();
     try {
       const targetAges = [90, 95, 100];
       const results = await Promise.all(targetAges.map(age => 
@@ -385,7 +387,7 @@ export class MonteCarlo {
           ? mainResult 
           : runMonteCarloSmoothIncomeTargetAsync(
               { ...scenario, lifeExpectancy: age },
-              accounts, MonteCarlo.SENSITIVITY_TRIALS, seed + age, useGuardrail
+              accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail
             )
       ));
       

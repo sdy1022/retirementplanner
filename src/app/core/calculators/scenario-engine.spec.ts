@@ -506,10 +506,13 @@ describe('scenario-engine', () => {
     const [year] = result.years;
     // Conversion fills the room above wages: $118,350 - $80,000.
     expect(year.conversion).toBe(38350);
-    // The plan pays only the incremental tax the conversion causes on top of wages —
-    // the full $38,350 sits inside the 22% bracket: 0.22 * 38,350 = $8,437 from brokerage.
-    expect(year.federalTax).toBe(8437);
-    expect(year.brokerageBalance).toBe(91563);
+    // With explicit cash-flow modeling, wages no longer automatically "cover their own taxes."
+    // All income generates tax, which is paid from unspent cash flow before reducing the portfolio.
+    // 80k wage + 38,350 conversion = 118,350 gross. Minus 16,100 single deduction = 102,250 taxable.
+    // Federal tax on 102,250 is $17,207 according to 2026 tax tables.
+    // Unspent wage cash ($80k) pays the $17,207 tax, leaving $62,793 to deposit into brokerage!
+    expect(year.federalTax).toBe(17207);
+    expect(year.brokerageBalance).toBe(162793);
     expect(year.rothBalance).toBe(38350);
     expect(year.traditionalBalance).toBe(461650);
     // The engine explains why the raw ending balance looks smaller than without conversions.
@@ -543,16 +546,17 @@ describe('scenario-engine', () => {
     ]);
 
     expect(result.years[0].conversion).toBe(0);
-    expect(result.endingAssets).toBe(600000);
+    // Assets accumulate the unspent $80k wage (less $8,770 base tax = $71,230) -> 671230
+    expect(result.endingAssets).toBe(671230);
     expect(result.note).toContain('skipped automatically');
   });
 
   it('grows wages by the annual raise, shrinking working-year conversion room', () => {
     const scenario: Scenario = {
       name: 'MFJ with raises',
-      currentAge: 60,
+      currentAge: 53,
       retirementAge: 60,
-      birthYear: 1966,
+      birthYear: 1973,
       ssClaimAge: 67,
       ssPia: 0,
       lifeExpectancy: 54,
@@ -561,7 +565,7 @@ describe('scenario-engine', () => {
       rothConversionStrategy: { mode: 'fill-to-income', targetIncome: 236700 },
       assumedReturnRate: 0,
       stateTaxRate: 0,
-      wageIncome: 100000,
+      wageIncome: 180000,
       annualLivingExpenses: 0,
       allowPreRetirementConversions: true,
       annualWageGrowth: 5000,

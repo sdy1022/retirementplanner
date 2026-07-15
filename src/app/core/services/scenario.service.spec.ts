@@ -75,7 +75,7 @@ describe('ScenarioService', () => {
         state_tax_rate: '0.0495',
         wage_income: '100000',
         annual_living_expenses: '150000',
-        annual_other_income: '0',
+        annual_other_income: '20000',
         annual_wage_growth: '0.02',
         residual_tax_rate: null,
         allow_pre_retirement_conversions: true,

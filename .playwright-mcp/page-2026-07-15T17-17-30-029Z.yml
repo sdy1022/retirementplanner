@@ -1,0 +1,119 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: Retirement Strategy
+    - navigation [ref=e5]:
+      - link "Dashboard" [ref=e6] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e7]: monitoring
+      - link "Accounts" [ref=e11] [cursor=pointer]:
+        - /url: /accounts
+        - img [ref=e12]: account_balance
+      - link "Scenario" [ref=e16] [cursor=pointer]:
+        - /url: /scenarios
+        - img [ref=e17]: tune
+      - link "Monte Carlo" [ref=e21] [cursor=pointer]:
+        - /url: /monte-carlo
+        - img [ref=e22]: query_stats
+      - link "Tranches" [ref=e26] [cursor=pointer]:
+        - /url: /tranche-planner
+        - img [ref=e27]: event_repeat
+      - link "Help" [ref=e31] [cursor=pointer]:
+        - /url: /runningsteps_eng.html
+        - img [ref=e32]: help
+      - link "Login" [ref=e36] [cursor=pointer]:
+        - /url: /login
+        - img [ref=e37]: login
+  - main [ref=e41]:
+    - generic [ref=e42]:
+      - generic [ref=e44]:
+        - generic [ref=e45]: Roth Conversion Tranche Planner
+        - paragraph [ref=e49]: "Within-year execution plan for the annual conversion target: a conservative January tranche sized off salary only, an October true-up once the bonus is visible, and a December precision top-off — plus a market-drawdown bonus tranche. Complements the multi-year strategy on the Scenario page. Federal bracket only; state flat tax applies on top and is not modeled here."
+      - generic [ref=e51]:
+        - generic [ref=e52]: 01 · Annual Setup (fill in January)
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - generic [ref=e57]: Bracket Ceiling — Taxable Income ($)
+            - spinbutton "Bracket Ceiling — Taxable Income ($)" [ref=e58]: "105700"
+            - generic [ref=e59]: Top of the target bracket. Defaults to the 22% single ceiling from the 2026 tax table.
+          - generic [ref=e60]:
+            - generic [ref=e61]: Salary / Other Taxable Income ($)
+            - spinbutton "Salary / Other Taxable Income ($)" [ref=e62]: "85000"
+            - generic [ref=e63]: Known income excluding bonus and conversions.
+          - generic [ref=e64]:
+            - generic [ref=e65]: Bonus / Variable Comp Estimate ($)
+            - spinbutton "Bonus / Variable Comp Estimate ($)" [ref=e66]: "12000"
+            - generic [ref=e67]: Best guess as of January. Refined in Tranche 2/3.
+          - generic [ref=e68]:
+            - generic [ref=e69]: Target Annual Conversion ($)
+            - spinbutton "Target Annual Conversion ($)" [ref=e70]: "45000"
+      - generic [ref=e72]:
+        - generic [ref=e73]: 02 · Fall True-Up (fill in Oct / Dec)
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - generic [ref=e78]: Projected Full-Year Taxable Income ($)
+            - spinbutton "Projected Full-Year Taxable Income ($)" [ref=e79]: "0"
+            - generic [ref=e80]: "Updated full-year estimate at the check-in: salary + confirmed bonus, excluding Roth conversions. Not literal YTD — project through Dec 31. Leave at 0 in January."
+          - generic [ref=e81]:
+            - generic [ref=e82]: Conversions Executed YTD ($)
+            - spinbutton "Conversions Executed YTD ($)" [ref=e83]: "0"
+            - generic [ref=e84]: Total actually converted so far this year (T1 by October; T1+T2 by December). Leave at 0 to assume prior tranches executed as planned.
+          - generic [ref=e85]:
+            - generic [ref=e86]: Which checkpoint is this?
+            - combobox "Which checkpoint is this?" [ref=e87]:
+              - option "January — Tranche 1 only" [selected]
+              - option "October — Tranche 2 true-up"
+              - option "December — Tranche 3 final"
+      - generic [ref=e89]:
+        - generic [ref=e90]: 03 · Drawdown Check
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e95]: 52-Week High (QQQ or VOO, $/share)
+            - spinbutton "52-Week High (QQQ or VOO, $/share)" [ref=e96]: "520"
+          - generic [ref=e97]:
+            - generic [ref=e98]: Current Price ($/share)
+            - spinbutton "Current Price ($/share)" [ref=e99]: "520"
+          - generic [ref=e100]:
+            - generic [ref=e101]: Max Bonus Conversion ($)
+            - spinbutton "Max Bonus Conversion ($)" [ref=e102]: "15000"
+            - generic [ref=e103]: Largest extra conversion you'd do on a drawdown. Keep it small enough that your taxable tax-source pool covers the tax (~25% of this amount in cash).
+      - generic [ref=e104]:
+        - generic [ref=e105]: ⚠ Over ceiling. Planned tranches plus projected income exceed the bracket top by $36,300. Trim Tranche 3 before executing.
+        - generic [ref=e106]: No drawdown trigger. Price is 0.0% off the 52-week high — below the 10% threshold. Proceed with the base schedule only.
+      - generic [ref=e108]:
+        - generic [ref=e109]: Bracket Gauge
+        - generic [ref=e112]:
+          - generic [ref=e113]:
+            - generic [ref=e114]: $0
+            - generic [ref=e115]: $105,700 ceiling
+          - generic [ref=e116]:
+            - generic [ref=e117]: income
+            - generic [ref=e118]: T1
+            - generic [ref=e119]: T3
+            - generic [ref=e120]: ceiling
+      - generic [ref=e123]:
+        - generic [ref=e124]:
+          - generic [ref=e125]: Tranche Schedule
+          - generic [ref=e127]: $45,000 planned
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - generic [ref=e130]: Tranche I
+            - generic [ref=e131]:
+              - generic [ref=e132]: January
+              - text: Salary-floor tranche. Sized off known salary only, ignoring bonus, so it holds even in a low-bonus year.
+            - generic [ref=e133]: $18,630
+            - generic [ref=e134]: OK
+          - generic [ref=e135]:
+            - generic [ref=e136]: Tranche II
+            - generic [ref=e137]:
+              - generic [ref=e138]: October
+              - text: True-up tranche once bonus is mostly visible.
+            - generic [ref=e139]: $0
+            - generic [ref=e140]: WATCH
+          - generic [ref=e141]:
+            - generic [ref=e142]: Tranche III
+            - generic [ref=e143]:
+              - generic [ref=e144]: Mid-December
+              - text: Final precision top-off. Closes remaining bracket space with a small buffer.
+            - generic [ref=e145]: $26,370
+            - generic [ref=e146]: OVER
+          - paragraph [ref=e147]: "Remaining bracket room right now: $8,700 · Rule: all tranches in-kind, zero withholding, tax paid from taxable brokerage tax-source pool with specific lot ID.Sizing: T1 = min(60% of target, 90% of salary-only room) · T2 preview = 65% of remainder · room math keeps a 10% margin; December T3 keeps a $200 buffer."

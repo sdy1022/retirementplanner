@@ -1,4 +1,4 @@
-import { Component, effect, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -26,6 +26,10 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
           <mat-form-field><mat-label>Retirement age</mat-label><input matInput type="number" formControlName="retirementAge" /></mat-form-field>
           <mat-form-field><mat-label>Current wage</mat-label><input matInput type="number" formControlName="wageIncome" /></mat-form-field>
           <mat-form-field><mat-label>Annual raise ($/yr)</mat-label><input matInput type="number" formControlName="annualWageGrowth" /></mat-form-field>
+          <mat-form-field><mat-label>Employee Pre-Tax 401(k)/IRA</mat-label><input matInput type="number" formControlName="annualPreTaxContribution" /></mat-form-field>
+          <mat-form-field><mat-label>Employer Match (Pre-Tax)</mat-label><input matInput type="number" formControlName="employerMatch" /></mat-form-field>
+          <mat-form-field><mat-label>Employee Roth Contribution</mat-label><input matInput type="number" formControlName="annualRothContribution" /></mat-form-field>
+          <mat-form-field><mat-label>Annual Brokerage Savings</mat-label><input matInput type="number" formControlName="annualBrokerageContribution" /></mat-form-field>
           <mat-form-field><mat-label>Other income (interest/non-qual div)</mat-label><input matInput type="number" formControlName="annualOtherIncome" /></mat-form-field>
           <mat-form-field><mat-label>Annual expenses</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
           <mat-form-field><mat-label>Birth year</mat-label><input matInput type="number" formControlName="birthYear" /></mat-form-field>
@@ -63,10 +67,10 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
           </mat-form-field>
           <mat-form-field><mat-label>Fixed amount</mat-label><input matInput type="number" formControlName="fixedAmount" /></mat-form-field>
           <mat-form-field><mat-label>Target bracket</mat-label><input matInput type="number" step="0.01" formControlName="targetBracket" /></mat-form-field>
-          <mat-form-field><mat-label>Traditional Balance</mat-label><input matInput type="number" formControlName="traditionalBalance" /></mat-form-field>
-          <mat-form-field><mat-label>Roth Balance</mat-label><input matInput type="number" formControlName="rothBalance" /></mat-form-field>
-          <mat-form-field><mat-label>Brokerage Balance</mat-label><input matInput type="number" formControlName="brokerageBalance" /></mat-form-field>
-          <mat-form-field><mat-label>Brokerage Cost Basis</mat-label><input matInput type="number" formControlName="brokerageCostBasis" /></mat-form-field>
+          <mat-form-field><mat-label>Traditional Balance (Read-only)</mat-label><input matInput type="number" [value]="summaryTraditional()" readonly /></mat-form-field>
+          <mat-form-field><mat-label>Roth Balance (Read-only)</mat-label><input matInput type="number" [value]="summaryRoth()" readonly /></mat-form-field>
+          <mat-form-field><mat-label>Brokerage Balance (Read-only)</mat-label><input matInput type="number" [value]="summaryBrokerage()" readonly /></mat-form-field>
+          <mat-form-field><mat-label>Brokerage Cost Basis (Read-only)</mat-label><input matInput type="number" [value]="summaryBrokerageBasis()" readonly /></mat-form-field>
           <mat-checkbox formControlName="allowPreRetirementConversions">Convert during working years (uses bracket room above wages)</mat-checkbox>
           <button mat-flat-button type="submit" [disabled]="form.invalid">Run Scenario</button>
         </form>
@@ -102,20 +106,12 @@ export class ScenarioBuilder {
   readonly scenarioService = inject(ScenarioService);
   readonly auth = inject(AuthService);
 
-  constructor() {
-    effect(() => {
-      // Re-evaluate whenever accounts signal changes
-      const accounts = this.state.accounts();
-      if (this.form && this.form.pristine) {
-        this.form.patchValue({
-          traditionalBalance: this.getBalance(['traditional_401k', 'traditional_ira']),
-          rothBalance: this.getBalance(['roth_401k', 'roth_ira']),
-          brokerageBalance: this.getBalance(['brokerage']),
-          brokerageCostBasis: accounts.find(a => a.type === 'brokerage')?.costBasis ?? this.getBalance(['brokerage'])
-        });
-      }
-    });
-  }
+  readonly summaryTraditional = computed(() => this.getBalance(['traditional_401k', 'traditional_ira']));
+  readonly summaryRoth = computed(() => this.getBalance(['roth_401k', 'roth_ira']));
+  readonly summaryBrokerage = computed(() => this.getBalance(['brokerage']));
+  readonly summaryBrokerageBasis = computed(() => this.state.accounts().find(a => a.type === 'brokerage')?.costBasis ?? this.summaryBrokerage());
+
+  constructor() {}
 
   private getBalance(types: string[]): number {
     return this.state.accounts().filter(a => types.includes(a.type)).reduce((sum, a) => sum + a.balance, 0);
@@ -128,6 +124,10 @@ export class ScenarioBuilder {
     birthYear: [this.state.scenario().birthYear, Validators.required],
     wageIncome: [this.state.scenario().wageIncome, Validators.required],
     annualWageGrowth: [this.state.scenario().annualWageGrowth ?? 0],
+    annualPreTaxContribution: [this.state.scenario().annualPreTaxContribution ?? 0],
+    annualRothContribution: [this.state.scenario().annualRothContribution ?? 0],
+    annualBrokerageContribution: [this.state.scenario().annualBrokerageContribution ?? 0],
+    employerMatch: [this.state.scenario().employerMatch ?? 0],
     annualOtherIncome: [this.state.scenario().annualOtherIncome ?? 0],
     annualLivingExpenses: [this.state.scenario().annualLivingExpenses ?? 0, Validators.required],
     ssClaimAge: [this.state.scenario().ssClaimAge, Validators.required],
@@ -149,10 +149,6 @@ export class ScenarioBuilder {
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [this.state.scenario().rothConversionStrategy.mode === 'fixed-amount' ? (this.state.scenario().rothConversionStrategy as any).amount : 25000],
     targetBracket: ['targetBracket' in this.state.scenario().rothConversionStrategy ? (this.state.scenario().rothConversionStrategy as any).targetBracket : 0.24],
-    traditionalBalance: [this.getBalance(['traditional_401k', 'traditional_ira']), Validators.required],
-    rothBalance: [this.getBalance(['roth_401k', 'roth_ira']), Validators.required],
-    brokerageBalance: [this.getBalance(['brokerage']), Validators.required],
-    brokerageCostBasis: [this.state.accounts().find(a => a.type === 'brokerage')?.costBasis ?? this.getBalance(['brokerage']), Validators.required],
   });
 
   save(): void {
@@ -174,6 +170,10 @@ export class ScenarioBuilder {
       currentAge: value.currentAge,
       retirementAge: value.retirementAge,
       wageIncome: value.wageIncome,
+      annualPreTaxContribution: value.annualPreTaxContribution,
+      annualRothContribution: value.annualRothContribution,
+      annualBrokerageContribution: value.annualBrokerageContribution,
+      employerMatch: value.employerMatch,
       annualOtherIncome: value.annualOtherIncome,
       annualLivingExpenses: value.annualLivingExpenses,
       birthYear: value.birthYear,
@@ -197,13 +197,6 @@ export class ScenarioBuilder {
       brokerageGainsTaxRate: value.brokerageGainsTaxRate,
       dividendYield: value.dividendYield,
     };
-
-    const now = new Date().toISOString().split('T')[0];
-    this.state.setAccounts([
-      { type: 'traditional_ira', balance: value.traditionalBalance, snapshotDate: now },
-      { type: 'roth_ira', balance: value.rothBalance, snapshotDate: now },
-      { type: 'brokerage', balance: value.brokerageBalance, costBasis: value.brokerageCostBasis, snapshotDate: now },
-    ]);
 
     this.state.updateScenario(scenario);
   }
@@ -234,6 +227,10 @@ export class ScenarioBuilder {
           birthYear: scenario.birthYear,
           wageIncome: scenario.wageIncome,
           annualWageGrowth: scenario.annualWageGrowth ?? 0,
+          annualPreTaxContribution: scenario.annualPreTaxContribution ?? 0,
+          annualRothContribution: scenario.annualRothContribution ?? 0,
+          annualBrokerageContribution: scenario.annualBrokerageContribution ?? 0,
+          employerMatch: scenario.employerMatch ?? 0,
           annualOtherIncome: scenario.annualOtherIncome ?? 0,
           annualLivingExpenses: scenario.annualLivingExpenses ?? 0,
           ssClaimAge: scenario.ssClaimAge,
