@@ -1,9 +1,13 @@
 export type FilingStatus = 'single' | 'married_filing_jointly';
 export type AccountType = 'traditional_401k' | 'traditional_ira' | 'roth_401k' | 'roth_ira' | 'brokerage';
 
+export type AccountOwner = 'primary' | 'spouse' | 'joint';
+
 export interface AccountSnapshot {
   id?: string;
   userId?: string;
+  name?: string;
+  owner?: AccountOwner;
   type: AccountType;
   balance: number;
   costBasis?: number;

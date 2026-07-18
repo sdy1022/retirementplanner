@@ -16,6 +16,8 @@ export class AccountService {
     return (data ?? []).map((row) => ({
       id: row.id,
       userId: row.user_id,
+      name: row.name ?? undefined,
+      owner: row.owner ?? undefined,
       type: row.type,
       balance: Number(row.balance),
       costBasis: row.cost_basis == null ? undefined : Number(row.cost_basis),
@@ -30,6 +32,8 @@ export class AccountService {
   async createMany(accounts: AccountSnapshot[], userId: string): Promise<void> {
     const rows = accounts.map((account) => ({
       user_id: userId,
+      name: account.name,
+      owner: account.owner,
       type: account.type,
       balance: account.balance,
       cost_basis: account.costBasis,

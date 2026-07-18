@@ -55,6 +55,23 @@ export class LocalStateService {
     });
   }
 
+
+  updateAccount(index: number, account: AccountSnapshot): void {
+    this.accounts.update((accounts) => {
+      const updated = accounts.map((existing, i) => i === index ? account : existing);
+      if (typeof localStorage !== 'undefined') localStorage.setItem('accounts', JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  deleteAccount(index: number): void {
+    this.accounts.update((accounts) => {
+      const updated = accounts.filter((_, i) => i !== index);
+      if (typeof localStorage !== 'undefined') localStorage.setItem('accounts', JSON.stringify(updated));
+      return updated;
+    });
+  }
+
   setAccounts(accounts: AccountSnapshot[]): void {
     if (typeof localStorage !== 'undefined') localStorage.setItem('accounts', JSON.stringify(accounts));
     this.accounts.set(accounts);
