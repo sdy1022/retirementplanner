@@ -3,6 +3,8 @@ import { simulateConversionStrategy, sumAccounts } from './roth-conversion-calcu
 import { engineInputFromScenario } from './engine-input-mapper';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from './scenario-engine';
 import { createPortfolioReturnSampler, createSeededRng } from './monte-carlo-returns';
+import { MortalitySex, SSA_MORTALITY_SOURCE } from '../mortality/ssa-period-life-table';
+import { deriveSeed, sampleDeathAge } from '../mortality/mortality-sampler';
 import { createGuardrail, GuardrailOptions } from './spending-guardrail';
 
 // 5,000 trials pins the success probability to roughly ±1% while keeping a full run to a
@@ -32,6 +34,32 @@ export interface MonteCarloAgePercentiles extends MonteCarloPercentiles {
 // brokerage gains by the gains rate, matching the rest of the app's after-tax figures.
 export function afterTaxAssetsForYear(year: YearResult, residualRate: number, gainsRate: number): number {
   return year.endingAssets - year.traditionalBalance * residualRate - Math.max(0, year.brokerageBalance - year.brokerageBasis) * gainsRate - (year.sblocLoanBalance ?? 0);
+}
+
+
+export interface StochasticLongevityOptions {
+  primarySex: MortalitySex;
+  spouseSex?: MortalitySex;
+  maximumAge?: number;
+}
+
+export interface StochasticLongevityResult {
+  trials: number;
+  successProbability: number;
+  meanEndingAssets: number;
+  endingAssetsPercentiles: MonteCarloPercentiles;
+  mortalitySource: string;
+  longevityStats: {
+    medianPrimaryDeathAge: number;
+    medianSpouseDeathAge?: number;
+    medianFirstDeathAge?: number;
+    medianLastSurvivorAge: number;
+    p10LastSurvivorAge: number;
+    p90LastSurvivorAge: number;
+    probabilityLastSurvivorTo90: number;
+    probabilityLastSurvivorTo95: number;
+    probabilityLastSurvivorTo100: number;
+  };
 }
 
 export interface MonteCarloResult {
@@ -110,6 +138,57 @@ export function runMonteCarloSmoothIncomeTarget(
 
 // Same simulation, but yields the main thread between chunks so the browser can keep
 // painting (spinner, progress) during a long run. onProgress reports completed trials.
+export function runMonteCarloStochasticLongevity(
+  scenario: Scenario,
+  accounts: AccountSnapshot[],
+  options: StochasticLongevityOptions,
+  trials = DEFAULT_MONTE_CARLO_TRIALS,
+  seed = Date.now(),
+  useGuardrail = false,
+): StochasticLongevityResult {
+  const runTrial = createTrialRunner(scenario, accounts, seed, useGuardrail, undefined, options);
+  const endings: number[] = [];
+  const primaryAges: number[] = [];
+  const spouseAges: number[] = [];
+  const firstAges: number[] = [];
+  const lastAges: number[] = [];
+  let successes = 0;
+  for (let i = 0; i < trials; i++) {
+    const trial = runTrial();
+    if (trial.success) successes++;
+    endings.push(trial.afterTaxEndingAssets);
+    primaryAges.push(trial.primaryDeathAge ?? Math.floor(scenario.lifeExpectancy));
+    if (trial.spouseDeathAge !== undefined) spouseAges.push(trial.spouseDeathAge);
+    firstAges.push(trial.firstDeathAge ?? trial.lastSurvivorAge ?? Math.floor(scenario.lifeExpectancy));
+    lastAges.push(trial.lastSurvivorAge ?? Math.floor(scenario.lifeExpectancy));
+  }
+  const sort = (values: number[]) => [...values].sort((a, b) => a - b);
+  const sortedEndings = sort(endings);
+  const sortedPrimary = sort(primaryAges);
+  const sortedSpouse = sort(spouseAges);
+  const sortedFirst = sort(firstAges);
+  const sortedLast = sort(lastAges);
+  const fractionAtLeast = (age: number) => lastAges.filter((value) => value >= age).length / trials;
+  return {
+    trials,
+    successProbability: successes / trials,
+    meanEndingAssets: endings.reduce((sum, value) => sum + value, 0) / trials,
+    endingAssetsPercentiles: percentilesOf(sortedEndings),
+    mortalitySource: SSA_MORTALITY_SOURCE,
+    longevityStats: {
+      medianPrimaryDeathAge: percentileOf(sortedPrimary, 0.5),
+      medianSpouseDeathAge: sortedSpouse.length ? percentileOf(sortedSpouse, 0.5) : undefined,
+      medianFirstDeathAge: sortedSpouse.length ? percentileOf(sortedFirst, 0.5) : undefined,
+      medianLastSurvivorAge: percentileOf(sortedLast, 0.5),
+      p10LastSurvivorAge: percentileOf(sortedLast, 0.1),
+      p90LastSurvivorAge: percentileOf(sortedLast, 0.9),
+      probabilityLastSurvivorTo90: fractionAtLeast(90),
+      probabilityLastSurvivorTo95: fractionAtLeast(95),
+      probabilityLastSurvivorTo100: fractionAtLeast(100),
+    },
+  };
+}
+
 export async function runMonteCarloSmoothIncomeTargetAsync(
   scenario: Scenario,
   accounts: AccountSnapshot[],
@@ -164,6 +243,10 @@ interface TrialOutcome {
   // every year), meaningful for failed trials.
   totalShortfall: number;
   consumptionRealization: number;
+  primaryDeathAge?: number;
+  spouseDeathAge?: number;
+  firstDeathAge?: number;
+  lastSurvivorAge?: number;
 }
 
 // Resolves the concrete plan once (strategy search, spending order) and returns a closure
@@ -176,7 +259,14 @@ interface TrialOutcome {
 // sequence, vs ~1% for truly independent trials), inflating the effective correlation
 // between trials and making the reported percentiles/success-rate less reliable than a
 // sample of `trials` independent runs.
-function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed: number, useGuardrail: boolean, guardrailOptions?: GuardrailOptions): () => TrialOutcome {
+function createTrialRunner(
+  scenario: Scenario,
+  accounts: AccountSnapshot[],
+  seed: number,
+  useGuardrail: boolean,
+  guardrailOptions?: GuardrailOptions,
+  longevityOptions?: StochasticLongevityOptions,
+): () => TrialOutcome {
   if (scenario.rothConversionStrategy.mode !== 'smooth-income-target') {
     throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy only.');
   }
@@ -207,16 +297,51 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
   // percentiles are on the same basis and directly comparable.
   const afterTaxAssets = (y: YearResult): number => afterTaxAssetsForYear(y, residualRate, gainsRate);
 
+  // Preserve the existing market RNG exactly so all fixed-lifespan golden values remain
+  // unchanged. Mortality uses independently derived per-trial streams.
   const rng = createSeededRng(seed);
   const plannedConsumption = base.years.reduce((sum, y) => sum + y.livingExpenses, 0);
+  let trialIndex = 0;
 
   return () => {
+    const thisTrial = trialIndex++;
+    let trialScenario = scenario;
+    let primaryDeathAge: number | undefined;
+    let spouseDeathAge: number | undefined;
+    let firstDeathAge: number | undefined;
+    let lastSurvivorAge: number | undefined;
+    let primaryEndAge = Math.floor(scenario.lifeExpectancy);
+    if (longevityOptions) {
+      primaryDeathAge = sampleDeathAge(
+        { currentAge: scenario.currentAge, sex: longevityOptions.primarySex, maximumAge: longevityOptions.maximumAge },
+        createSeededRng(deriveSeed(seed, `primary-mortality-${thisTrial}`)),
+      );
+      primaryEndAge = primaryDeathAge;
+      if (scenario.filingStatus === 'married_filing_jointly' && scenario.spouseCurrentAge !== undefined) {
+        spouseDeathAge = sampleDeathAge(
+          { currentAge: scenario.spouseCurrentAge, sex: longevityOptions.spouseSex ?? 'female', maximumAge: longevityOptions.maximumAge },
+          createSeededRng(deriveSeed(seed, `spouse-mortality-${thisTrial}`)),
+        );
+        const spouseDeathOnPrimaryTimeline = Math.floor(scenario.currentAge) + (spouseDeathAge - Math.floor(scenario.spouseCurrentAge));
+        primaryEndAge = Math.max(primaryDeathAge, spouseDeathOnPrimaryTimeline);
+        firstDeathAge = Math.min(primaryDeathAge, spouseDeathOnPrimaryTimeline);
+        lastSurvivorAge = primaryEndAge;
+        trialScenario = { ...scenario, lifeExpectancy: primaryEndAge, spouseLifeExpectancy: spouseDeathAge };
+      } else {
+        firstDeathAge = primaryDeathAge;
+        lastSurvivorAge = primaryDeathAge;
+        trialScenario = { ...scenario, lifeExpectancy: primaryDeathAge };
+      }
+    }
     // Fresh sampler per trial: draws from the shared rng stream (so the overall sequence
     // is still deterministic per seed), but resets the block-continuation state so this
     // trial's return path doesn't pick up mid-block from the previous trial. The guardrail
     // needs the same treatment — a fresh instance per trial so "currently in cut mode"
     // doesn't leak across trial boundaries either.
-    const sampleReturn = createPortfolioReturnSampler(rng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1);
+    const marketRng = longevityOptions
+      ? createSeededRng(deriveSeed(seed, `market-${thisTrial}`))
+      : rng;
+    const sampleReturn = createPortfolioReturnSampler(marketRng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1);
     const rawGuardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
     // Records which simulated years the guardrail actually cut spending, without changing
     // its decisions — lets the trial report guardrail trigger frequency/duration alongside
@@ -239,15 +364,19 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       : undefined;
     const years = simulateConversionStrategy({
       ...engineInputFromScenario(
-        { ...scenario, allowPreRetirementConversions, spendingOrder },
+        { ...trialScenario, allowPreRetirementConversions, spendingOrder },
         accounts,
       ),
       strategy: resolvedStrategy,
+      primaryLifeExpectancy: primaryDeathAge,
       returnRateForYear: sampleReturn,
       guardrail,
     });
     const last = years.at(-1);
     const actualConsumption = years.reduce((sum, y) => sum + y.expensesFromSs + y.expensesFromRmd + y.expensesFromTraditional + y.expensesFromBrokerage + y.expensesFromRoth, 0);
+    const trialPlannedConsumption = longevityOptions
+      ? years.reduce((sum, y) => sum + (scenario.annualLivingExpenses ?? 0) * Math.pow(1.03, y.age - Math.floor(scenario.currentAge)), 0)
+      : plannedConsumption;
     return {
       success: years.every((y) => y.shortfall <= 0.01),
       afterTaxEndingAssets: last ? afterTaxAssets(last) : 0,
@@ -256,7 +385,11 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       yearsInCutMode: cutYearCount,
       maxConsecutiveCuts,
       totalShortfall: years.reduce((sum, y) => sum + Math.max(0, y.shortfall), 0),
-      consumptionRealization: plannedConsumption > 0 ? actualConsumption / plannedConsumption : 1,
+      consumptionRealization: trialPlannedConsumption > 0 ? actualConsumption / trialPlannedConsumption : 1,
+      primaryDeathAge,
+      spouseDeathAge,
+      firstDeathAge,
+      lastSurvivorAge,
     };
   };
 }

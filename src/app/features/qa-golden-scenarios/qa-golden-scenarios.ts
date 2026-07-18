@@ -5,7 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { runScenario } from '../../core/calculators/scenario-engine';
-import { runMonteCarloSmoothIncomeTarget } from '../../core/calculators/monte-carlo';
+import { runMonteCarloSmoothIncomeTarget, runMonteCarloStochasticLongevity } from '../../core/calculators/monte-carlo';
 import { createPortfolioReturnSampler, createSeededRng } from '../../core/calculators/monte-carlo-returns';
 import { findEarliestFeasibleRetirementAge } from '../../core/calculators/retirement-age-search';
 import { MonteCarloWorkerService } from '../../core/services/monte-carlo-worker.service';
@@ -68,7 +68,7 @@ export class QaGoldenScenarios {
     this.running.set(true); this.results.set([]);
     const runners: Array<() => Promise<QaScenarioResult> | QaScenarioResult> = [
       () => this.runAccumulation(), () => this.runAggregation(), () => this.runPortfolio(),
-      () => this.runSensitivity(), () => this.runRetirementSearch(), () => this.runWorkerParity(),
+      () => this.runSensitivity(), () => this.runRetirementSearch(), () => this.runWorkerParity(), () => this.runStochasticLongevity(),
     ];
     for (const runner of runners) {
       try { const result = await runner(); this.results.update((r: QaScenarioResult[]) => [...r, result]); }
@@ -86,5 +86,18 @@ export class QaGoldenScenarios {
   private runPortfolio():QaScenarioResult { const start=performance.now(); const stock=this.stats(1),balanced=this.stats(.6); return this.result('3. Paired stock/bond historical simulation',start,[this.check('All-stock volatility','19.4564%',(stock.sd*100).toFixed(4)+'%',Math.abs(stock.sd-0.1945641084)<1e-8),this.check('60/40 volatility','12.1420%',(balanced.sd*100).toFixed(4)+'%',Math.abs(balanced.sd-0.1214204489)<1e-8),this.check('60/40 materially lower','< 80% of all-stock',((balanced.sd/stock.sd)*100).toFixed(1)+'%',balanced.sd<stock.sd*.8)]); }
   private runSensitivity():QaScenarioResult { const start=performance.now(); const expectedOff=[224/300,268/300,284/300],expectedOn=[264/300,285/300,295/300];const rates=[.05,.06,.07];const checks:QaCheck[]=[];rates.forEach((rate,i)=>{const scenario={...monteCarloScenario,assumedReturnRate:rate};const off=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,false);const on=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,true);checks.push(this.check(`${rate*100}% / guardrail off`,(expectedOff[i]*100).toFixed(2)+'%',(off.successProbability*100).toFixed(2)+'%',off.successProbability===expectedOff[i]));checks.push(this.check(`${rate*100}% / guardrail on`,(expectedOn[i]*100).toFixed(2)+'%',(on.successProbability*100).toFixed(2)+'%',on.successProbability===expectedOn[i]));});return this.result('4. Return × Guardrail six-cell sensitivity',start,checks); }
   private runRetirementSearch():QaScenarioResult { const start=performance.now(); const result=findEarliestFeasibleRetirementAge(retirementSearchScenario,retirementSearchAccounts,58,62,{minimumSuccessRate:.75,minimumConsumptionRealization:.9,maximumGuardrailTriggerRate:.9,planningAge:95},250,GOLDEN_SEED,true);return this.result('5. Earliest feasible retirement age',start,[this.check('Age rows','58, 59, 60, 61, 62',result.rows.map(r=>r.retirementAge).join(', '),result.rows.map(r=>r.retirementAge).join(',')==='58,59,60,61,62'),this.check('Earliest qualifying age','59',String(result.earliestFeasibleAge),result.earliestFeasibleAge===59),this.check('Success-rate vector','71.6%, 80.0%, 87.2%, 92.0%, 96.0%',result.rows.map(r=>(r.successProbability*100).toFixed(1)+'%').join(', '),JSON.stringify(result.rows.map(r=>r.successProbability))===JSON.stringify([.716,.8,.872,.92,.96]))]); }
+
+  private async runStochasticLongevity():Promise<QaScenarioResult> {
+    const start=performance.now();
+    const direct=runMonteCarloStochasticLongevity(monteCarloScenario,monteCarloAccounts,{primarySex:'male',maximumAge:110},100,GOLDEN_SEED,true);
+    const viaWorker=await this.worker.runStochasticLongevity(monteCarloScenario,monteCarloAccounts,{primarySex:'male',maximumAge:110},100,GOLDEN_SEED,true);
+    return this.result('7. SSA stochastic longevity',start,[
+      this.check('Success rate','98.00%',(direct.successProbability*100).toFixed(2)+'%',direct.successProbability===.98),
+      this.check('Median death age','84',String(direct.longevityStats.medianPrimaryDeathAge),direct.longevityStats.medianPrimaryDeathAge===84),
+      this.check('10th–90th percentile death age','71–93',`${direct.longevityStats.p10LastSurvivorAge}–${direct.longevityStats.p90LastSurvivorAge}`,direct.longevityStats.p10LastSurvivorAge===71&&direct.longevityStats.p90LastSurvivorAge===93),
+      this.check('Worker parity',direct.meanEndingAssets.toFixed(2),viaWorker.meanEndingAssets.toFixed(2),direct.meanEndingAssets===viaWorker.meanEndingAssets),
+    ]);
+  }
+
   private async runWorkerParity():Promise<QaScenarioResult> { const start=performance.now(); const direct=runMonteCarloSmoothIncomeTarget(monteCarloScenario,monteCarloAccounts,100,GOLDEN_SEED,true); const viaWorker=await this.worker.run(monteCarloScenario,monteCarloAccounts,100,GOLDEN_SEED,true); return this.result('6. Web Worker serialization parity',start,[this.check('Success rate',String(direct.successProbability),String(viaWorker.successProbability),direct.successProbability===viaWorker.successProbability),this.check('Mean ending assets',direct.meanEndingAssets.toFixed(2),viaWorker.meanEndingAssets.toFixed(2),direct.meanEndingAssets===viaWorker.meanEndingAssets),this.check('Trial count','100',String(viaWorker.trials),viaWorker.trials===100)]); }
 }

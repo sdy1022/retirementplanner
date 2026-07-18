@@ -40,6 +40,10 @@ export interface ConversionSimulationInput {
   // (single brackets/deductions, single IRMAA thresholds, one Medicare enrollee) — the
   // "widow's tax penalty" — and the survivor keeps the LARGER of the two Social Security
   // benefits. All balances are assumed jointly owned and roll to the survivor.
+  // Optional primary death age. When omitted the primary is assumed alive through endAge.
+  // Monte Carlo stochastic-longevity trials set this independently from endAge so the
+  // spouse can be the last survivor.
+  primaryLifeExpectancy?: number;
   spouseCurrentAge?: number;
   spouseLifeExpectancy?: number;
   // Spouse monthly benefit at the spouse's claim age (already claiming-age-adjusted)
@@ -99,7 +103,8 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   const lastAge = Math.floor(input.endAge);
 
   for (let age = startAge; age <= lastAge; age++) {
-    const isRetired = input.retirementAge ? age >= input.retirementAge : true;
+    const primaryAlive = input.primaryLifeExpectancy === undefined || age <= input.primaryLifeExpectancy;
+    const isRetired = !primaryAlive || (input.retirementAge ? age >= input.retirementAge : true);
     // Assets carried into this year, before this year's flows/growth — what the guardrail
     // judges "behind schedule" against
     const beginningAssets = traditionalBalance + rothBalance + brokerageBalance;
@@ -115,17 +120,24 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       && input.spouseCurrentAge !== undefined && input.spouseLifeExpectancy !== undefined;
     const spouseAgeNow = spouseModeled ? input.spouseCurrentAge! + (age - startAge) : undefined;
     const spouseAlive = !spouseModeled || spouseAgeNow! <= input.spouseLifeExpectancy!;
-    const filingStatus: FilingStatus = spouseModeled && !spouseAlive ? 'single' : input.filingStatus;
+    const bothAlive = primaryAlive && spouseAlive;
+    const filingStatus: FilingStatus = spouseModeled && !bothAlive ? 'single' : input.filingStatus;
 
     // Benefits as entered (already adjusted for each claim age), indexed by COLA from the
     // simulation's first year — SSA applies COLA to the record before and after claiming.
     // While both spouses are alive their benefits add; the survivor keeps the larger one.
     const ssColaFactor = Math.pow(1 + (input.ssColaRate ?? DEFAULT_SS_COLA_RATE), age - startAge);
-    const primarySsStream = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
-    const spouseSsStream = (spouseModeled && input.spouseSsPia && input.spouseSsClaimAge && spouseAgeNow! >= input.spouseSsClaimAge)
+    const primarySsStream = (primaryAlive && input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
+    const spouseSsStream = (spouseModeled && spouseAlive && input.spouseSsPia && input.spouseSsClaimAge && spouseAgeNow! >= input.spouseSsClaimAge)
       ? roundCurrency(input.spouseSsPia * 12 * ssColaFactor)
       : 0;
-    const ssIncome = spouseModeled && !spouseAlive ? Math.max(primarySsStream, spouseSsStream) : primarySsStream + spouseSsStream;
+    // Once either spouse dies, the survivor receives the larger available household benefit.
+    // The deceased person's own stream is retained only as the survivor-benefit comparison.
+    const primaryPotentialSs = (input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
+    const spousePotentialSs = (spouseModeled && input.spouseSsPia && input.spouseSsClaimAge && spouseAgeNow! >= input.spouseSsClaimAge) ? roundCurrency(input.spouseSsPia * 12 * ssColaFactor) : 0;
+    const ssIncome = spouseModeled && !bothAlive
+      ? (primaryAlive || spouseAlive ? Math.max(primaryPotentialSs, spousePotentialSs) : 0)
+      : primarySsStream + spouseSsStream;
     // Sizing pass assumes the 85% cap (true whenever conversions/RMDs fill the brackets);
     // the exact provisional-income amount is computed once withdrawals are known
     const taxableSsEstimate = roundCurrency(ssIncome * 0.85);

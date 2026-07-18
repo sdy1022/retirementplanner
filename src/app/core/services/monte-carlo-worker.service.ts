@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AccountSnapshot, Scenario } from '../models/retirement.models';
-import { MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../calculators/monte-carlo';
+import { MonteCarloResult, StochasticLongevityOptions, StochasticLongevityResult, runMonteCarloSmoothIncomeTargetAsync, runMonteCarloStochasticLongevity } from '../calculators/monte-carlo';
 import { RetirementAgeCriteria, RetirementAgeSearchResult, findEarliestFeasibleRetirementAge } from '../calculators/retirement-age-search';
 
 @Injectable({ providedIn: 'root' })
@@ -10,6 +10,11 @@ export class MonteCarloWorkerService {
   run(scenario: Scenario, accounts: AccountSnapshot[], trials: number, seed: number, useGuardrail: boolean): Promise<MonteCarloResult> {
     if (typeof Worker === 'undefined') return runMonteCarloSmoothIncomeTargetAsync(scenario, accounts, trials, seed, useGuardrail);
     return this.dispatch<MonteCarloResult>({ kind: 'monte-carlo', scenario, accounts, trials, seed, useGuardrail });
+  }
+
+  runStochasticLongevity(scenario: Scenario, accounts: AccountSnapshot[], options: StochasticLongevityOptions, trials: number, seed: number, useGuardrail: boolean): Promise<StochasticLongevityResult> {
+    if (typeof Worker === 'undefined') return Promise.resolve(runMonteCarloStochasticLongevity(scenario, accounts, options, trials, seed, useGuardrail));
+    return this.dispatch<StochasticLongevityResult>({ kind: 'stochastic-longevity', scenario, accounts, options, trials, seed, useGuardrail });
   }
 
   searchRetirementAge(scenario: Scenario, accounts: AccountSnapshot[], minimumAge: number, maximumAge: number, criteria: RetirementAgeCriteria, trials: number, seed: number, useGuardrail: boolean): Promise<RetirementAgeSearchResult> {

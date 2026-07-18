@@ -15,3 +15,7 @@ The suite fixes seed `20260718` and protects these end-to-end calculation paths:
 5. Earliest-feasible-retirement-age search across a fixed age range and criteria.
 
 Changes to tax rules, historical data, cash-flow ordering, guardrails, or retirement search can intentionally change these values. Review and explain any updated golden values rather than refreshing them automatically.
+
+## 7. SSA stochastic longevity
+
+Runs 100 seeded trials using the embedded SSA 2023 period life table. It verifies the mortality-weighted success rate, sampled death-age distribution, and Web Worker parity while leaving all fixed-lifespan golden scenarios unchanged.

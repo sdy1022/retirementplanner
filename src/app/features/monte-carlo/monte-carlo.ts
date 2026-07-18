@@ -6,7 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
-import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult } from '../../core/calculators/monte-carlo';
+import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, StochasticLongevityResult } from '../../core/calculators/monte-carlo';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from '../../core/calculators/scenario-engine';
 import { downloadFile, escapeCsvField, exportFilename } from '../../core/services/export.service';
 import { LocalStateService } from '../../core/services/local-state.service';
@@ -209,6 +209,44 @@ import { RetirementAgeSearchResult } from '../../core/calculators/retirement-age
       </section>
       <section class="mc-sensitivity">
         <mat-card>
+          <mat-card-header><mat-card-title>SSA Stochastic Longevity</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <p class="strategy-note">
+              Samples a death age independently for each trial using the SSA 2023 period life table. Market and mortality random streams are separated, so longevity sampling does not reshuffle the market path. Keep the fixed age 90/95/100 table above as the conservative stress test.
+            </p>
+            <div class="search-grid">
+              <label>Primary sex
+                <select [(ngModel)]="primarySex"><option value="male">Male</option><option value="female">Female</option></select>
+              </label>
+              @if (scenario().filingStatus === 'married_filing_jointly' && scenario().spouseCurrentAge != null) {
+                <label>Spouse sex
+                  <select [(ngModel)]="spouseSex"><option value="male">Male</option><option value="female">Female</option></select>
+                </label>
+              }
+              <label>Maximum modeled age <input type="number" min="90" max="120" [(ngModel)]="maximumMortalityAge" /></label>
+            </div>
+            <button mat-stroked-button [disabled]="stochasticLongevityRunning()" (click)="runStochasticLongevity()">
+              {{ stochasticLongevityRunning() ? 'Running…' : 'Run mortality-weighted analysis' }}
+            </button>
+            @if (stochasticLongevityResult(); as stochastic) {
+              <div class="metric"><span>Mortality-weighted model success rate</span><strong>{{ stochastic.successProbability * 100 | number:'1.0-0' }}%</strong></div>
+              <div class="metric sub"><span>Median primary death age</span><strong>{{ stochastic.longevityStats.medianPrimaryDeathAge }}</strong></div>
+              @if (stochastic.longevityStats.medianSpouseDeathAge != null) {
+                <div class="metric sub"><span>Median spouse death age</span><strong>{{ stochastic.longevityStats.medianSpouseDeathAge }}</strong></div>
+                <div class="metric sub"><span>Median first death age (primary-age timeline)</span><strong>{{ stochastic.longevityStats.medianFirstDeathAge }}</strong></div>
+              }
+              <div class="metric sub"><span>Median last-survivor age</span><strong>{{ stochastic.longevityStats.medianLastSurvivorAge }}</strong></div>
+              <div class="metric sub"><span>10th–90th percentile last-survivor age</span><strong>{{ stochastic.longevityStats.p10LastSurvivorAge }}–{{ stochastic.longevityStats.p90LastSurvivorAge }}</strong></div>
+              <div class="metric sub"><span>Last survivor reaches age 95</span><strong>{{ stochastic.longevityStats.probabilityLastSurvivorTo95 * 100 | number:'1.0-0' }}%</strong></div>
+              <div class="metric sub"><span>Last survivor reaches age 100</span><strong>{{ stochastic.longevityStats.probabilityLastSurvivorTo100 * 100 | number:'1.0-0' }}%</strong></div>
+              <p class="strategy-note mc-disclaimer">{{ stochastic.mortalitySource }}. Population-level mortality does not reflect personal health, smoking, family history, or socioeconomic factors.</p>
+            }
+          </mat-card-content>
+        </mat-card>
+      </section>
+
+      <section class="mc-sensitivity">
+        <mat-card>
           <mat-card-header><mat-card-title>Estimated Earliest Feasible Retirement Age</mat-card-title></mat-card-header>
           <mat-card-content>
             <p class="strategy-note">Searches each candidate age with the same market paths. Qualification requires both the selected model-success rate and consumption realization through the planning age.</p>
@@ -275,7 +313,7 @@ import { RetirementAgeSearchResult } from '../../core/calculators/retirement-age
     .sensitivity-table tr.current { background: #eef4fb; font-weight: 600; }
     .search-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:12px; }
     .search-grid label { display:flex; flex-direction:column; gap:4px; font-size:.85rem; }
-    .search-grid input { padding:7px; }
+    .search-grid input, .search-grid select { padding:7px; }
     @media print {
       button, .guardrail-toggle, .guardrail-example, .mc-loading, .mc-error, .export-group { display: none !important; }
       mat-card { box-shadow: none !important; border: 1px solid #ddd; margin-bottom: 24px; page-break-inside: avoid; }
@@ -320,6 +358,11 @@ export class MonteCarlo {
 
   readonly longevityRunning = signal(false);
   readonly longevityResult = signal<{ age: number; successProbability: number; isBase: boolean }[] | null>(null);
+  readonly stochasticLongevityRunning = signal(false);
+  readonly stochasticLongevityResult = signal<StochasticLongevityResult | null>(null);
+  primarySex: 'male' | 'female' = 'male';
+  spouseSex: 'male' | 'female' = 'female';
+  maximumMortalityAge = 110;
 
   // Percentile fan across trials, plus the deterministic flat-rate projection for reference.
   // The deterministic run reuses the same engine and the same after-tax basis as the trial
@@ -430,6 +473,26 @@ export class MonteCarlo {
       this.error.set(err instanceof Error ? err.message : 'Retirement-age search failed.');
     } finally {
       this.retirementAgeRunning.set(false);
+    }
+  }
+
+  async runStochasticLongevity(): Promise<void> {
+    this.stochasticLongevityRunning.set(true);
+    this.stochasticLongevityResult.set(null);
+    try {
+      const result = await this.worker.runStochasticLongevity(
+        this.state.scenario(),
+        this.state.accounts(),
+        { primarySex: this.primarySex, spouseSex: this.spouseSex, maximumAge: this.maximumMortalityAge },
+        MonteCarlo.SENSITIVITY_TRIALS,
+        this.lastSeed || Date.now(),
+        this.resultUsedGuardrail(),
+      );
+      this.stochasticLongevityResult.set(result);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Stochastic longevity run failed.');
+    } finally {
+      this.stochasticLongevityRunning.set(false);
     }
   }
 
