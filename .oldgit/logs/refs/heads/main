@@ -1,0 +1,52 @@
+0000000000000000000000000000000000000000 47953024878cd67a99a178285509f3e0c7001392 Dayang.Sun <sundayang@gmail.com> 1783023732 -0400	commit (initial): Initial commit of Retirement Strategy Calculator
+47953024878cd67a99a178285509f3e0c7001392 47953024878cd67a99a178285509f3e0c7001392 Dayang.Sun <sundayang@gmail.com> 1783023733 -0400	Branch: renamed refs/heads/master to refs/heads/main
+47953024878cd67a99a178285509f3e0c7001392 9e6e8f91c5c0986dc3c1eab7ed0714620b1544ea Dayang Sun <dayang.sun@toyotatmh.com> 1783130100 -0400	commit: smooth rmd strategy
+9e6e8f91c5c0986dc3c1eab7ed0714620b1544ea b051606ea724a86f79cb76186422420f61e6a4c9 Dayang Sun <dayang.sun@toyotatmh.com> 1783132040 -0400	commit: Add smooth-income target strategy and SS fixes
+b051606ea724a86f79cb76186422420f61e6a4c9 f63dd860a050fc58c17529fc6b7ac2d7f6dc0033 Dayang Sun <bigoceanincolumbus@gmail.com> 1783132455 -0400	commit: Trigger Vercel deployment
+f63dd860a050fc58c17529fc6b7ac2d7f6dc0033 832abde6e0b8ac2963722dbd716a13e46f8fffef Dayang Sun <bigoceanincolumbus@gmail.com> 1783173855 -0400	commit: add comments
+832abde6e0b8ac2963722dbd716a13e46f8fffef a6792ebd90317629af291bb2a4a8349a10bb3fe9 Dayang Sun <bigoceanincolumbus@gmail.com> 1783175335 -0400	commit: second update
+a6792ebd90317629af291bb2a4a8349a10bb3fe9 f7c14dd57d3e8fb0288998feef7c7fef6db492aa Dayang Sun <bigoceanincolumbus@gmail.com> 1783176482 -0400	commit: third update
+f7c14dd57d3e8fb0288998feef7c7fef6db492aa c580511b0ecf3a6924190233d2ed91258d0af508 Dayang Sun <bigoceanincolumbus@gmail.com> 1783197173 -0400	commit: living cost added & brokerage withdrawl tax update
+c580511b0ecf3a6924190233d2ed91258d0af508 6d31ca23af13233f74b571502fe9aded82d96d91 Dayang Sun <bigoceanincolumbus@gmail.com> 1783270459 -0400	commit: tradeoff roth strategy & new updated report
+6d31ca23af13233f74b571502fe9aded82d96d91 18c2d0e94fdd411b778058575500cb2727e96203 Dayang Sun <bigoceanincolumbus@gmail.com> 1783334634 -0400	commit: chore: remove stray compiled .js artifacts and gitignore .env
+18c2d0e94fdd411b778058575500cb2727e96203 d60c1058a28660c3f83011c32315ea23da942cb6 Dayang Sun <bigoceanincolumbus@gmail.com> 1783334634 -0400	commit: feat(engine): add preserve-floor search, RMD-era conversion behaviors, and Roth tax fallback
+d60c1058a28660c3f83011c32315ea23da942cb6 0795147b431103f9d73f553ecff5dc62180ce07b Dayang Sun <bigoceanincolumbus@gmail.com> 1783334634 -0400	commit: feat(ui): load latest Supabase account snapshots on startup and wire new strategy options
+0795147b431103f9d73f553ecff5dc62180ce07b 91a4d35ca92d0076368533854eaf41269101b873 Dayang Sun <bigoceanincolumbus@gmail.com> 1783334886 -0400	commit: fix(engine): score auto-optimize candidates by after-tax ending assets
+91a4d35ca92d0076368533854eaf41269101b873 e27378f951e8643e2c23b088b40bef3bf8a049c2 Dayang Sun <bigoceanincolumbus@gmail.com> 1783334887 -0400	commit: feat(engine): inflation-index tax brackets and standard deduction per simulated year
+e27378f951e8643e2c23b088b40bef3bf8a049c2 c74162ddc5c458aba7e265d8a707b7fff57842a8 Dayang Sun <bigoceanincolumbus@gmail.com> 1783335597 -0400	commit: many updates
+c74162ddc5c458aba7e265d8a707b7fff57842a8 33abad958dd9196cb417cc7d1e67b00fa0304d08 Dayang Sun <bigoceanincolumbus@gmail.com> 1783341985 -0400	commit: feat(engine): support Roth conversions during working years
+33abad958dd9196cb417cc7d1e67b00fa0304d08 30ef561a51cde9e57dedd8f3e7b2a62128838e76 Dayang Sun <bigoceanincolumbus@gmail.com> 1783342082 -0400	commit: feat(engine): model annual wage growth in working years
+30ef561a51cde9e57dedd8f3e7b2a62128838e76 6356157f58d3978d3ccf171cb59324eae4245bf9 Dayang Sun <bigoceanincolumbus@gmail.com> 1783343553 -0400	commit: feat(engine): auto-select and explain working-year conversion trade-off
+6356157f58d3978d3ccf171cb59324eae4245bf9 64a0b91e2d0b171d0c12ef0825e5e874adf3bf26 Dayang Sun <bigoceanincolumbus@gmail.com> 1783344453 -0400	commit: feat(engine): auto-select expense funding order by after-tax outcome
+64a0b91e2d0b171d0c12ef0825e5e874adf3bf26 0759dce729181ff47b9ab77538b14fa6352bf853 Dayang Sun <bigoceanincolumbus@gmail.com> 1783344997 -0400	commit: feat(engine): discount unrealized brokerage gains in the after-tax score
+0759dce729181ff47b9ab77538b14fa6352bf853 e7fd28033479306941e58a0c793fb7f1605bbbbb Dayang Sun <bigoceanincolumbus@gmail.com> 1783346671 -0400	commit: feat(engine): tax brokerage dividends annually
+e7fd28033479306941e58a0c793fb7f1605bbbbb cfeacf2edfb670afe8a32805fa6c42da3d28d4c3 Dayang Sun <bigoceanincolumbus@gmail.com> 1783347265 -0400	commit: feat(ui): show final per-account balances in dashboard summary cards
+cfeacf2edfb670afe8a32805fa6c42da3d28d4c3 21bf0b1505e0559cce6209dee2ed045c3a354bbf Dayang Sun <bigoceanincolumbus@gmail.com> 1783349539 -0400	commit: update withdraw strategy
+21bf0b1505e0559cce6209dee2ed045c3a354bbf 7d5d6e6aad5fc7746b4749196f0adaa919084b48 Dayang Sun <bigoceanincolumbus@gmail.com> 1783350622 -0400	commit: chore: update files
+7d5d6e6aad5fc7746b4749196f0adaa919084b48 a33b247c449e872793bc8eba6d990079c8f52097 Dayang Sun <bigoceanincolumbus@gmail.com> 1783365724 -0400	commit: feat(engine): report funding sources for expenses and taxes per year
+a33b247c449e872793bc8eba6d990079c8f52097 9dc3889c1ea8e06c7b2fde047c3aeaee8d4182da Dayang Sun <bigoceanincolumbus@gmail.com> 1783366209 -0400	commit: feat(ui): break asset curve into per-account balance lines
+9dc3889c1ea8e06c7b2fde047c3aeaee8d4182da 5c45df79d32445a89d2c3191e500673b360a1a5e Dayang Sun <bigoceanincolumbus@gmail.com> 1783367993 -0400	commit: chore: update files
+5c45df79d32445a89d2c3191e500673b360a1a5e 3f6b6ac5dd4a06b7d9ed4ef67ee2815352dc06dd Dayang Sun <bigoceanincolumbus@gmail.com> 1783384777 -0400	commit: docs: add dashboard and scenario images
+3f6b6ac5dd4a06b7d9ed4ef67ee2815352dc06dd 94e8b41d17c03c39830c5ebf5f9609f7a7859c96 Dayang Sun <bigoceanincolumbus@gmail.com> 1783386901 -0400	commit: fix(engine)!: correct 2026 tax tables and IRMAA to official IRS/CMS values
+94e8b41d17c03c39830c5ebf5f9609f7a7859c96 4d4c28f405dc93530fbdd637687db33f2fef0ad3 Dayang Sun <bigoceanincolumbus@gmail.com> 1783386901 -0400	commit: fix(engine): floor fractional ages, real SS taxation, state SS exemption, pre-59.5 withholding guard
+4d4c28f405dc93530fbdd637687db33f2fef0ad3 31b7561359bf46602b075ab7c29a79dd96dc36b4 Dayang Sun <bigoceanincolumbus@gmail.com> 1783386901 -0400	commit: feat(app): wire annualOtherIncome through scenario/UI and show tax data year
+31b7561359bf46602b075ab7c29a79dd96dc36b4 15d99b1e63bf9a44ff0a4211cfcc59020b300a18 Dayang Sun <bigoceanincolumbus@gmail.com> 1783519447 -0400	commit: chore: update files
+15d99b1e63bf9a44ff0a4211cfcc59020b300a18 ddf7c46af08f5df2ee15c0f9005779528cdce6cb Dayang Sun <bigoceanincolumbus@gmail.com> 1783520015 -0400	commit: chore: update files
+ddf7c46af08f5df2ee15c0f9005779528cdce6cb 409b1092eb7aa8e3fe25845196bf5fc85b9d0dbe Dayang Sun <bigoceanincolumbus@gmail.com> 1783521572 -0400	commit: chore: update files
+409b1092eb7aa8e3fe25845196bf5fc85b9d0dbe 8323dcb888a16114204196e18650f6a7142ff5e6 Dayang Sun <bigoceanincolumbus@gmail.com> 1783534347 -0400	commit: chore: update files
+8323dcb888a16114204196e18650f6a7142ff5e6 07f8f78828f52f8fbd62e6558d834b531698136d Dayang Sun <bigoceanincolumbus@gmail.com> 1783549441 -0400	commit: chore: update files
+07f8f78828f52f8fbd62e6558d834b531698136d 2fb3654b655e53cc03da1ddba7651a19cc52a1bc Dayang Sun <bigoceanincolumbus@gmail.com> 1783628595 -0400	commit: feat(dashboard): action plan and charts follow the winning tax-funding strategy
+2fb3654b655e53cc03da1ddba7651a19cc52a1bc 0e2283ff2f51017e99b5312dc85cd306d3512597 Dayang Sun <bigoceanincolumbus@gmail.com> 1783628622 -0400	merge mcs-merge: Merge made by the 'ort' strategy.
+0e2283ff2f51017e99b5312dc85cd306d3512597 9e589e7d99fcf8eb59d2e7ba1e5b9e6a494f35c5 Dayang Sun <bigoceanincolumbus@gmail.com> 1783630097 -0400	commit: chore: update files
+9e589e7d99fcf8eb59d2e7ba1e5b9e6a494f35c5 0d14e4d89f6ea980d3632d45ef85975b6e61cdef Dayang Sun <bigoceanincolumbus@gmail.com> 1783643191 -0400	commit: chore: update files
+0d14e4d89f6ea980d3632d45ef85975b6e61cdef 92ca47478930f2083310756d66976f7b96180eea Dayang Sun <bigoceanincolumbus@gmail.com> 1783694096 -0400	pull origin main: Fast-forward
+92ca47478930f2083310756d66976f7b96180eea 930f7f155fe42e1a968f5f674fb8e4af508a910d Dayang Sun <bigoceanincolumbus@gmail.com> 1783695634 -0400	pull origin main: Fast-forward
+930f7f155fe42e1a968f5f674fb8e4af508a910d 84003c267fdd025c9883cc55720159722ce82c40 Dayang Sun <bigoceanincolumbus@gmail.com> 1783696021 -0400	pull origin main: Fast-forward
+84003c267fdd025c9883cc55720159722ce82c40 b3c2e43951d84d274aee60e7ad27f3e2affa7091 Dayang Sun <bigoceanincolumbus@gmail.com> 1783871009 -0400	commit: report export
+b3c2e43951d84d274aee60e7ad27f3e2affa7091 461e334ea2dabc85eae7c6c9acf9fd286d168f3e Dayang Sun <bigoceanincolumbus@gmail.com> 1783871064 -0400	commit (merge): Merge branch 'main' of https://github.com/sdy1022/retirementplanner
+461e334ea2dabc85eae7c6c9acf9fd286d168f3e 18077f74ce165fbece0f0803ec7014a7da348fd4 Dayang Sun <bigoceanincolumbus@gmail.com> 1783880534 -0400	commit: chore: update files
+18077f74ce165fbece0f0803ec7014a7da348fd4 d4842d4157c1b7740dd87fcfd72588b404c5aa8f Dayang Sun <bigoceanincolumbus@gmail.com> 1783950499 -0400	commit: chore: update files
+d4842d4157c1b7740dd87fcfd72588b404c5aa8f 3ce58b883005f87974ee56c21f303ddb1d868087 Dayang Sun <bigoceanincolumbus@gmail.com> 1783952763 -0400	commit: chore: update files
+3ce58b883005f87974ee56c21f303ddb1d868087 c9b6a3e3bb4daa7ca5773dafa95de224cf118b35 Dayang Sun <bigoceanincolumbus@gmail.com> 1784136379 -0400	commit: feat(tranche-planner): add Roth conversion tranche planning UI
+c9b6a3e3bb4daa7ca5773dafa95de224cf118b35 ee2e81fa287fbfe8b673924eccde330fff20df3b Dayang Sun <bigoceanincolumbus@gmail.com> 1784136635 -0400	commit (amend): feat(tranche-planner): add Roth conversion tranche planning UI
+ee2e81fa287fbfe8b673924eccde330fff20df3b fb8f7f4226f98178b20afb6aeb79c0dcc2c04d43 Dayang Sun <bigoceanincolumbus@gmail.com> 1784384272 -0400	commit: chore: update files

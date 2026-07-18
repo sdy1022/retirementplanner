@@ -18,6 +18,13 @@ export const HISTORICAL_SP500_ANNUAL_RETURNS: readonly number[] = [
   /* 2018–2025 */ -0.0423, 0.3121, 0.1802, 0.2847, -0.1804, 0.2606, 0.2488, 0.1778,
 ];
 
+// 10-year US Treasury total returns for the same 1928–2025 years and source as the
+// stock series. Keeping both arrays aligned lets the block bootstrap replay the historical
+// stock/bond relationship rather than sampling each asset independently.
+export const HISTORICAL_10Y_TREASURY_ANNUAL_RETURNS: readonly number[] = [
+  0.00835471, 0.04203804, 0.04540931, -0.02558856, 0.08790307, 0.01855272, 0.07963443, 0.04472048, 0.05017875, 0.01379146, 0.04213249, 0.04412261, 0.05402482, -0.02022198, 0.02294868, 0.02490000, 0.02577611, 0.03804417, 0.03128375, 0.00919697, 0.01951037, 0.04663485, 0.00429596, -0.00295314, 0.02267996, 0.04143840, 0.03289803, -0.01336439, -0.02255774, 0.06797013, -0.02099018, -0.02646631, 0.11639504, 0.02060921, 0.05693544, 0.01684162, 0.03728065, 0.00718855, 0.02907941, -0.01580621, 0.03274620, -0.05014049, 0.16754737, 0.09786897, 0.02818449, 0.03658665, 0.01988609, 0.03605254, 0.15984561, 0.01289961, -0.00777581, 0.00670720, -0.02989744, 0.08199215, 0.32814549, 0.03200209, 0.13733364, 0.25712488, 0.24284215, -0.04960509, 0.08223596, 0.17693647, 0.06235375, 0.15004510, 0.09361637, 0.14210958, -0.08036656, 0.23480780, 0.01428608, 0.09939130, 0.14921432, -0.08254215, 0.16655267, 0.05572181, 0.15116400, 0.00375319, 0.04490684, 0.02867533, 0.01961001, 0.10209922, 0.20101280, -0.11116695, 0.08462934, 0.16035335, 0.02971572, -0.09104569, 0.10746180, 0.01284300, 0.00690550, 0.02801716, -0.00016692, 0.09635631, 0.11331898, -0.04416034, -0.17828172, 0.03880000, -0.01637180, 0.07795481
+];
+
 export function historicalMean(returns: readonly number[]): number {
   return returns.reduce((sum, r) => sum + r, 0) / returns.length;
 }
@@ -94,4 +101,18 @@ export function createReturnSampler(
       : Math.floor(rng() * count);
     return historicalReturns[index] + shift;
   };
+}
+
+
+export function createPortfolioReturnSampler(
+  rng: () => number,
+  targetGeometricMean: number,
+  stockAllocation: number,
+  meanBlockLength: number = DEFAULT_MEAN_BLOCK_LENGTH,
+): () => number {
+  const stockWeight = Math.min(1, Math.max(0, stockAllocation));
+  const portfolioHistory = HISTORICAL_SP500_ANNUAL_RETURNS.map((stock, index) =>
+    stockWeight * stock + (1 - stockWeight) * HISTORICAL_10Y_TREASURY_ANNUAL_RETURNS[index],
+  );
+  return createReturnSampler(rng, targetGeometricMean, portfolioHistory, meanBlockLength);
 }

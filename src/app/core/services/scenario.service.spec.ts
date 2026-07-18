@@ -19,6 +19,7 @@ describe('ScenarioService', () => {
     filingStatus: 'married_filing_jointly',
     rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
     assumedReturnRate: 0.08,
+    stockAllocation: 0.6,
     stateTaxRate: 0.0495,
     wageIncome: 180000,
     annualOtherIncome: 20000,
@@ -48,6 +49,7 @@ describe('ScenarioService', () => {
     expect(row.annual_other_income).toBe(20000);
     expect(row.dividend_yield).toBe(0.015);
     expect(row.filing_status).toBe('married_filing_jointly');
+    expect(row.stock_allocation).toBe(0.6);
   });
 
   it('create throws when Supabase returns an error instead of resolving silently', async () => {
@@ -72,6 +74,7 @@ describe('ScenarioService', () => {
         filing_status: 'married_filing_jointly',
         roth_conversion_strategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
         assumed_return_rate: '0.08',
+        stock_allocation: '0.6',
         state_tax_rate: '0.0495',
         wage_income: '100000',
         annual_living_expenses: '150000',
@@ -91,5 +94,6 @@ describe('ScenarioService', () => {
     expect(loaded.allowPreRetirementConversions).toBeTrue();
     expect(loaded.brokerageGainsTaxRate).toBe(0.15);
     expect(loaded.dividendYield).toBe(0.015);
+    expect(loaded.stockAllocation).toBe(0.6);
   });
 });

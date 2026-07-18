@@ -139,4 +139,87 @@ describe('roth-conversion-calculator', () => {
     });
     expect(highIncomeYear.totalTax).toBe(9070);
   });
+
+  it('sums multiple accounts of the same type instead of keeping only one', () => {
+    const [year] = simulateConversionStrategy({
+      accounts: [
+        { type: 'traditional_401k', balance: 300000, snapshotDate: '2026-01-01' },
+        { type: 'traditional_401k', balance: 200000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 100000, costBasis: 70000, snapshotDate: '2026-01-01' },
+        { type: 'brokerage', balance: 50000, costBasis: 40000, snapshotDate: '2026-01-01' },
+      ],
+      strategy: { mode: 'none' },
+      currentAge: 60,
+      endAge: 60,
+      birthYear: 1966,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+    });
+
+    expect(year.traditionalBalance).toBe(500000);
+    expect(year.brokerageBalance).toBe(150000);
+    expect(year.brokerageBasis).toBe(110000);
+  });
+
+  it('funds Roth contributions only from cash left after expenses and taxes', () => {
+    const [year] = simulateConversionStrategy({
+      accounts: [],
+      strategy: { mode: 'none' },
+      currentAge: 50,
+      endAge: 50,
+      birthYear: 1976,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 50000,
+      retirementAge: 60,
+      annualLivingExpenses: 45000,
+      annualRothContribution: 20000,
+    });
+
+    // Only $5,000 remains before federal tax. The requested $20,000 Roth contribution
+    // must be reduced rather than financed by a withdrawal or reported as new wealth.
+    expect(year.federalTax).toBe(3820);
+    expect(year.rothBalance).toBe(1180);
+    expect(year.shortfall).toBe(0);
+  });
+
+  it('accumulates exact pre-tax contributions and match across working years at zero return', () => {
+    const years = simulateConversionStrategy({
+      accounts: [{ type: 'traditional_401k', balance: 100000, snapshotDate: '2026-01-01' }],
+      strategy: { mode: 'none' },
+      currentAge: 55,
+      endAge: 57,
+      birthYear: 1971,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 20000,
+      retirementAge: 58,
+      annualPreTaxContribution: 20000,
+      employerMatch: 5000,
+    });
+
+    expect(years.at(-1)!.traditionalBalance).toBe(175000);
+    expect(years.every((year) => year.totalTax === 0)).toBe(true);
+  });
+
+  it('inflates working-year living expenses from the current age', () => {
+    const years = simulateConversionStrategy({
+      accounts: [{ type: 'brokerage', balance: 1000000, costBasis: 1000000, snapshotDate: '2026-01-01' }],
+      strategy: { mode: 'none' },
+      currentAge: 50,
+      endAge: 52,
+      birthYear: 1976,
+      filingStatus: 'single',
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      retirementAge: 60,
+      annualLivingExpenses: 50000,
+    });
+
+    expect(years.map((year) => year.livingExpenses)).toEqual([50000, 51500, 53045]);
+  });
+
 });

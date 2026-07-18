@@ -1,4 +1,4 @@
-import { createReturnSampler, createSeededRng, geometricMean, historicalMean, HISTORICAL_SP500_ANNUAL_RETURNS, shiftForGeometricMean } from './monte-carlo-returns';
+import { createReturnSampler, createPortfolioReturnSampler, createSeededRng, geometricMean, historicalMean, HISTORICAL_SP500_ANNUAL_RETURNS, shiftForGeometricMean } from './monte-carlo-returns';
 
 describe('monte-carlo-returns', () => {
   it('createSeededRng is deterministic for a given seed and stays within [0, 1)', () => {
@@ -123,5 +123,24 @@ describe('monte-carlo-returns', () => {
     const sample = createReturnSampler(rng, 0.07);
     const draws = Array.from({ length: 2000 }, () => sample());
     expect(Math.min(...draws)).toBeLessThan(-0.2);
+  });
+});
+
+describe('portfolio return sampler', () => {
+  it('uses the aligned stock/bond history and preserves the requested long-run CAGR', () => {
+    const rng = createSeededRng(42);
+    const sampler = createPortfolioReturnSampler(rng, 0.06, 0.6, 1);
+    const draws = Array.from({ length: 50000 }, () => sampler());
+    expect(geometricMean(draws)).toBeCloseTo(0.06, 2);
+  });
+
+  it('produces lower dispersion for a balanced allocation than all stocks with the same seed', () => {
+    const stocks = Array.from({ length: 5000 }, createPortfolioReturnSampler(createSeededRng(7), 0.06, 1, 1));
+    const balanced = Array.from({ length: 5000 }, createPortfolioReturnSampler(createSeededRng(7), 0.06, 0.6, 1));
+    const sd = (values: number[]) => {
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+    };
+    expect(sd(balanced)).toBeLessThan(sd(stocks));
   });
 });

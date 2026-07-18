@@ -19,6 +19,7 @@ const defaultScenario: Scenario = {
   filingStatus: 'married_filing_jointly',
   rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
   assumedReturnRate: 0.08,
+  stockAllocation: 0.6,
   stateTaxRate: 0.0495,
   wageIncome: 100000,
   annualOtherIncome: 0,

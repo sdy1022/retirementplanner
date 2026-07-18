@@ -43,6 +43,7 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
           <mat-form-field><mat-label>Spouse SS claim age</mat-label><input matInput type="number" formControlName="spouseSsClaimAge" /></mat-form-field>
           <mat-form-field><mat-label>Life expectancy</mat-label><input matInput type="number" formControlName="lifeExpectancy" /></mat-form-field>
           <mat-form-field><mat-label>Return rate</mat-label><input matInput type="number" step="0.01" formControlName="assumedReturnRate" /></mat-form-field>
+          <mat-form-field><mat-label>Stock allocation</mat-label><input matInput type="number" min="0" max="1" step="0.05" formControlName="stockAllocation" /><mat-hint>Bond allocation = 1 − stock allocation</mat-hint></mat-form-field>
           <mat-form-field><mat-label>State tax rate</mat-label><input matInput type="number" step="0.01" formControlName="stateTaxRate" /></mat-form-field>
           <mat-form-field><mat-label>Residual tax rate (heirs/liquidation)</mat-label><input matInput type="number" step="0.01" formControlName="residualTaxRate" /></mat-form-field>
           <mat-form-field><mat-label>Brokerage gains tax (0 = heir step-up)</mat-label><input matInput type="number" step="0.01" formControlName="brokerageGainsTaxRate" /></mat-form-field>
@@ -109,7 +110,9 @@ export class ScenarioBuilder {
   readonly summaryTraditional = computed(() => this.getBalance(['traditional_401k', 'traditional_ira']));
   readonly summaryRoth = computed(() => this.getBalance(['roth_401k', 'roth_ira']));
   readonly summaryBrokerage = computed(() => this.getBalance(['brokerage']));
-  readonly summaryBrokerageBasis = computed(() => this.state.accounts().find(a => a.type === 'brokerage')?.costBasis ?? this.summaryBrokerage());
+  readonly summaryBrokerageBasis = computed(() => this.state.accounts()
+    .filter((account) => account.type === 'brokerage')
+    .reduce((sum, account) => sum + (account.costBasis ?? account.balance), 0));
 
   constructor() {}
 
@@ -140,6 +143,7 @@ export class ScenarioBuilder {
     spouseSsClaimAge: [this.state.scenario().spouseSsClaimAge ?? 0],
     lifeExpectancy: [this.state.scenario().lifeExpectancy, Validators.required],
     assumedReturnRate: [this.state.scenario().assumedReturnRate, Validators.required],
+    stockAllocation: [this.state.scenario().stockAllocation ?? 1, [Validators.required, Validators.min(0), Validators.max(1)]],
     stateTaxRate: [this.state.scenario().stateTaxRate],
     residualTaxRate: [this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE],
     allowPreRetirementConversions: [this.state.scenario().allowPreRetirementConversions ?? false],
@@ -190,6 +194,7 @@ export class ScenarioBuilder {
       filingStatus: value.filingStatus as Scenario['filingStatus'],
       rothConversionStrategy,
       assumedReturnRate: value.assumedReturnRate,
+      stockAllocation: value.stockAllocation,
       stateTaxRate: value.stateTaxRate,
       residualTaxRate: value.residualTaxRate,
       allowPreRetirementConversions: value.allowPreRetirementConversions,
@@ -237,6 +242,7 @@ export class ScenarioBuilder {
           ssPia: scenario.ssPia,
           lifeExpectancy: scenario.lifeExpectancy,
           assumedReturnRate: scenario.assumedReturnRate,
+          stockAllocation: scenario.stockAllocation ?? 1,
           stateTaxRate: scenario.stateTaxRate,
           residualTaxRate: scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE,
           allowPreRetirementConversions: scenario.allowPreRetirementConversions ?? false,

@@ -1,7 +1,8 @@
 import { AccountSnapshot, Scenario, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy, sumAccounts } from './roth-conversion-calculator';
+import { engineInputFromScenario } from './engine-input-mapper';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from './scenario-engine';
-import { createReturnSampler, createSeededRng } from './monte-carlo-returns';
+import { createPortfolioReturnSampler, createSeededRng } from './monte-carlo-returns';
 import { createGuardrail, GuardrailOptions } from './spending-guardrail';
 
 // 5,000 trials pins the success probability to roughly ±1% while keeping a full run to a
@@ -215,7 +216,7 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
     // trial's return path doesn't pick up mid-block from the previous trial. The guardrail
     // needs the same treatment — a fresh instance per trial so "currently in cut mode"
     // doesn't leak across trial boundaries either.
-    const sampleReturn = createReturnSampler(rng, scenario.assumedReturnRate);
+    const sampleReturn = createPortfolioReturnSampler(rng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1);
     const rawGuardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
     // Records which simulated years the guardrail actually cut spending, without changing
     // its decisions — lets the trial report guardrail trigger frequency/duration alongside
@@ -237,15 +238,15 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
         }
       : undefined;
     const years = simulateConversionStrategy({
-      accounts,
+      ...engineInputFromScenario(
+        { ...scenario, allowPreRetirementConversions, spendingOrder },
+        accounts,
+      ),
       strategy: resolvedStrategy,
-      currentAge: scenario.currentAge,
-      endAge: scenario.lifeExpectancy,
-      birthYear: scenario.birthYear,
-      filingStatus: scenario.filingStatus,
-      assumedReturnRate: scenario.assumedReturnRate,
       returnRateForYear: sampleReturn,
       guardrail,
+<<<<<<< HEAD
+=======
       stateTaxRate: scenario.stateTaxRate,
       wageIncome: scenario.wageIncome,
       annualOtherIncome: scenario.annualOtherIncome,
@@ -268,6 +269,7 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       spendingOrder,
       dividendYield: scenario.dividendYield,
       sblocTaxFunding: scenario.sblocTaxFunding,
+>>>>>>> 4f9ba46450b10872fcbb0b59240a54580a41cb8b
     });
     const last = years.at(-1);
     const actualConsumption = years.reduce((sum, y) => sum + y.expensesFromSs + y.expensesFromRmd + y.expensesFromTraditional + y.expensesFromBrokerage + y.expensesFromRoth, 0);

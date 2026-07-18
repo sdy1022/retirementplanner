@@ -65,7 +65,7 @@ export const DEFAULT_SBLOC_MAX_LTV = 0.4;
 // Only the gain portion of brokerage withdrawals is taxed, at the long-term capital gains rate
 export const LONG_TERM_CAPITAL_GAINS_RATE = 0.15;
 
-// Living expenses grow with inflation each year after retirement
+// Living expenses are entered in current-year dollars and grow from the start of the plan.
 const EXPENSE_INFLATION_RATE = 0.03;
 
 // Long-run average Social Security COLA. Benefits are COLA-indexed every year (both before
@@ -139,20 +139,20 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
     // then Roth. All traditional slices are ordinary income, so they join the tax base before the
     // conversion decision and consume bracket room that would otherwise go to conversions.
-    const expenseBaseAge = Math.floor(input.retirementAge ?? input.currentAge);
-    const livingExpenses = roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, Math.max(0, age - expenseBaseAge)) * guardrailDecision.livingExpenseMultiplier);
-    let availableWage = currentWage;
-    const actualPreTaxContrib = isRetired ? 0 : Math.min(availableWage, input.annualPreTaxContribution ?? 0);
-    availableWage -= actualPreTaxContrib;
+    const livingExpenses = roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, Math.max(0, age - startAge)) * guardrailDecision.livingExpenseMultiplier);
+    const actualPreTaxContrib = isRetired
+      ? 0
+      : Math.min(currentWage, Math.max(0, input.annualPreTaxContribution ?? 0));
+    const actualEmployerMatch = isRetired
+      ? 0
+      : Math.min(currentWage, Math.max(0, input.employerMatch ?? 0));
 
-    const actualRothContrib = isRetired ? 0 : Math.min(availableWage, input.annualRothContribution ?? 0);
-    availableWage -= actualRothContrib;
-
-    const actualBrokerageContrib = isRetired ? 0 : Math.min(availableWage + (input.annualOtherIncome ?? 0), input.annualBrokerageContribution ?? 0);
-    const actualEmployerMatch = isRetired ? 0 : (input.employerMatch ?? 0);
-
+    // Roth and brokerage contributions are after-tax uses of cash. They are intentionally
+    // not deducted here: first cover living expenses and all taxes, then fund these
+    // contributions only from cash that is actually left. This prevents the portfolio from
+    // silently financing a nominal "salary contribution" when wages cannot support it.
     const baseInflows = currentWage + (input.annualOtherIncome ?? 0) + ssIncome + rmd;
-    const baseOutflows = livingExpenses + actualPreTaxContrib + actualRothContrib + actualBrokerageContrib;
+    const baseOutflows = livingExpenses + actualPreTaxContrib;
     const netCash = baseInflows - baseOutflows;
 
     let spendingNeed = 0;
@@ -403,6 +403,17 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const unfundedExpenses = Math.max(0, spendingNeed - fromBrokerage - fromTraditional - fromRoth);
     const shortfall = roundCurrency(unpaidOutflow + unfundedExpenses);
 
+    // Only genuine after-tax cash remaining after living costs and all taxes may be
+    // contributed. Requested Roth is funded first, then requested brokerage savings; any
+    // additional surplus is also swept to brokerage because the model has no idle-cash bucket.
+    const requestedRothContrib = isRetired ? 0 : Math.max(0, input.annualRothContribution ?? 0);
+    const actualRothContrib = Math.min(unspentCashAfterTaxes, requestedRothContrib);
+    unspentCashAfterTaxes = roundCurrency(unspentCashAfterTaxes - actualRothContrib);
+
+    const requestedBrokerageContrib = isRetired ? 0 : Math.max(0, input.annualBrokerageContribution ?? 0);
+    const actualBrokerageContrib = Math.min(unspentCashAfterTaxes, requestedBrokerageContrib);
+    unspentCashAfterTaxes = roundCurrency(unspentCashAfterTaxes - actualBrokerageContrib);
+
     const growthRate = input.returnRateForYear ? input.returnRateForYear(age, age - startAge) : input.assumedReturnRate;
     const newTraditional = actualPreTaxContrib + actualEmployerMatch;
     const newRoth = actualRothContrib;
@@ -472,22 +483,18 @@ function conversionAmount(strategy: RothConversionStrategy, taxableIncome: numbe
   return amountToFillBracket(taxableIncome, ceilingForRate(strategy.targetBracket, filingStatus, taxYear, inflationFactor), filingStatus, taxYear, inflationFactor);
 }
 
-function latestAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): AccountSnapshot[] {
-  const latestByType = new Map<AccountSnapshot['type'], AccountSnapshot>();
-  for (const account of accounts) {
-    if (!types.includes(account.type)) continue;
-    const existing = latestByType.get(account.type);
-    if (!existing || new Date(account.snapshotDate) > new Date(existing.snapshotDate)) {
-      latestByType.set(account.type, account);
-    }
-  }
-  return Array.from(latestByType.values());
+function matchingAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): AccountSnapshot[] {
+  // Each row in the current UI represents a distinct current account. Do not collapse rows
+  // merely because they share a tax type; households commonly own multiple 401(k), IRA, or
+  // brokerage accounts of the same type. Historical snapshots need a future stable accountId
+  // before they can be de-duplicated safely.
+  return accounts.filter((account) => types.includes(account.type));
 }
 
 export function sumAccounts(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
-  return latestAccounts(accounts, types).reduce((total, account) => total + account.balance, 0);
+  return matchingAccounts(accounts, types).reduce((total, account) => total + account.balance, 0);
 }
 
 export function sumCostBasis(accounts: AccountSnapshot[], types: AccountSnapshot['type'][]): number {
-  return latestAccounts(accounts, types).reduce((total, account) => total + (account.costBasis ?? account.balance), 0);
+  return matchingAccounts(accounts, types).reduce((total, account) => total + (account.costBasis ?? account.balance), 0);
 }

@@ -125,14 +125,9 @@ export class Accounts {
   async loadFromCloud(): Promise<void> {
     try {
       const list = await this.accountService.list();
-      const latestMap = new Map<string, AccountSnapshot>();
-      for (const acc of list) {
-        if (!latestMap.has(acc.type)) {
-          latestMap.set(acc.type, acc);
-        }
-      }
-      if (latestMap.size > 0) {
-        this.state.setAccounts(Array.from(latestMap.values()));
+      if (list.length > 0) {
+        // Preserve every account row, including multiple accounts of the same tax type.
+        this.state.setAccounts(list);
         alert('Accounts loaded from cloud successfully.');
       } else {
         alert('No accounts found in cloud.');

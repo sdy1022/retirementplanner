@@ -1,5 +1,6 @@
 import { AccountSnapshot, RothConversionStrategy, Scenario, ScenarioResult, SpendingOrder, YearResult } from '../models/retirement.models';
 import { simulateConversionStrategy } from './roth-conversion-calculator';
+import { engineInputFromScenario } from './engine-input-mapper';
 import { DEFAULT_TAX_YEAR, getTaxTable, IRMAA_TIERS } from './tax-tables';
 import { getRmdStartAge } from './rmd-calculator';
 
@@ -74,8 +75,10 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
   };
   const runWithStrategy = (strategy: RothConversionStrategy) => {
     return simulateConversionStrategy({
-      accounts,
+      ...engineInputFromScenario(scenario, accounts),
       strategy,
+<<<<<<< HEAD
+=======
       currentAge: scenario.currentAge,
       endAge: scenario.lifeExpectancy,
       birthYear: scenario.birthYear,
@@ -103,6 +106,7 @@ function runScenarioCore(scenario: Scenario, accounts: AccountSnapshot[]): Scena
       spendingOrder: scenario.spendingOrder,
       dividendYield: scenario.dividendYield,
       sblocTaxFunding: scenario.sblocTaxFunding,
+>>>>>>> 4f9ba46450b10872fcbb0b59240a54580a41cb8b
     });
   };
 

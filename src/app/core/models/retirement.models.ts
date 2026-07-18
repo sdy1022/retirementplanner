@@ -58,6 +58,9 @@ export interface Scenario {
   filingStatus: FilingStatus;
   rothConversionStrategy: RothConversionStrategy;
   assumedReturnRate: number;
+  // Scenario-level portfolio allocation used by Monte Carlo. All accounts share this
+  // allocation in v1 and are rebalanced annually. Defaults to 100% stocks for legacy data.
+  stockAllocation?: number;
   stateTaxRate: number;
   wageIncome: number;
   // Interest and non-qualified dividends taxed as ordinary income every year

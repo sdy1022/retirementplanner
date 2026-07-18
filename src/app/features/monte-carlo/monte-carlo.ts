@@ -6,10 +6,12 @@ import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
-import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult, runMonteCarloSmoothIncomeTargetAsync } from '../../core/calculators/monte-carlo';
+import { afterTaxAssetsForYear, DEFAULT_MONTE_CARLO_TRIALS, MonteCarloResult } from '../../core/calculators/monte-carlo';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from '../../core/calculators/scenario-engine';
 import { downloadFile, escapeCsvField, exportFilename } from '../../core/services/export.service';
 import { LocalStateService } from '../../core/services/local-state.service';
+import { MonteCarloWorkerService } from '../../core/services/monte-carlo-worker.service';
+import { RetirementAgeSearchResult } from '../../core/calculators/retirement-age-search';
 
 @Component({
   selector: 'app-monte-carlo',
@@ -21,10 +23,10 @@ import { LocalStateService } from '../../core/services/local-state.service';
         <mat-card-content>
           <p class="strategy-note">
             Replays the solved conversion plan under {{ trials | number }} randomized market-return sequences instead of one
-            flat rate. Returns are drawn as a block bootstrap of 1928–2025 S&amp;P 500 history (Damodaran, NYU Stern) —
+            flat rate. Returns are drawn as a joint block bootstrap of 1928–2025 S&amp;P 500 and 10-year Treasury history (Damodaran, NYU Stern) —
             multi-year crash and boom runs (1929–32, 1973–74, 2000–02, 2008, …) replay in sequence, capturing the
             sequence-of-returns risk that iid sampling misses — with long-run compound growth matched to your assumed
-            {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% return.
+            {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% portfolio return ({{ (scenario().stockAllocation ?? 1) * 100 | number: '1.0-0' }}% stocks / {{ (1 - (scenario().stockAllocation ?? 1)) * 100 | number: '1.0-0' }}% bonds).
           </p>
           @if (!isSmoothIncomeTarget()) {
             <p class="strategy-note mc-error">
@@ -109,8 +111,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
           <mat-card-content>
             <div class="metric"><span>Model success rate through age {{ finalAge() }}</span><strong>{{ mc.successProbability * 100 | number: '1.0-0' }}%</strong></div>
             <p class="strategy-note mc-disclaimer">
-              This is a model-conditional success rate, not a calibrated real-world probability. It assumes a single
-              asset class (S&amp;P 500), fixed 3% inflation, a fixed strategy that only adapts via the guardrail below
+              This is a model-conditional success rate, not a calibrated real-world probability. It uses the scenario-level stock/bond allocation with annual rebalancing, fixed 3% inflation, a fixed strategy that only adapts via the guardrail below
               (if enabled), and a fixed life expectancy. Depending on assumptions not yet modeled — asset allocation,
               inflation variability, longevity, long-term care — the realistic range could differ by roughly 10
               percentage points or more. Use this number to compare strategies against each other and to stress-test
@@ -164,12 +165,12 @@ import { LocalStateService } from '../../core/services/local-state.service';
               </button>
             } @else {
               <table class="sensitivity-table">
-                <thead><tr><th>Assumed return</th><th>Model success rate</th></tr></thead>
+                <thead><tr><th>Assumed return</th><th>Guardrail off</th><th>Guardrail on</th></tr></thead>
                 <tbody>
                   @for (row of sensitivityResult(); track row.label) {
                     <tr [class.current]="row.isBase">
                       <td>{{ row.label }}</td>
-                      <td>{{ row.successProbability * 100 | number: '1.0-0' }}%</td>
+                      <td>{{ row.noGuardrail * 100 | number: '1.0-0' }}%</td><td>{{ row.guardrail * 100 | number: '1.0-0' }}%</td>
                     </tr>
                   }
                 </tbody>
@@ -206,6 +207,29 @@ import { LocalStateService } from '../../core/services/local-state.service';
           </mat-card-content>
         </mat-card>
       </section>
+      <section class="mc-sensitivity">
+        <mat-card>
+          <mat-card-header><mat-card-title>Estimated Earliest Feasible Retirement Age</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <p class="strategy-note">Searches each candidate age with the same market paths. Qualification requires both the selected model-success rate and consumption realization through the planning age.</p>
+            <div class="search-grid">
+              <label>From age <input type="number" [(ngModel)]="retirementSearchMinAge" /></label>
+              <label>To age <input type="number" [(ngModel)]="retirementSearchMaxAge" /></label>
+              <label>Success threshold <input type="number" step="0.01" [(ngModel)]="retirementSuccessThreshold" /></label>
+              <label>Consumption threshold <input type="number" step="0.01" [(ngModel)]="retirementConsumptionThreshold" /></label>
+              <label>Plan through age <input type="number" [(ngModel)]="retirementPlanningAge" /></label>
+            </div>
+            <button mat-stroked-button [disabled]="retirementAgeRunning()" (click)="runRetirementAgeSearch()">{{ retirementAgeRunning() ? 'Searching…' : 'Find earliest feasible age' }}</button>
+            @if (retirementAgeResult(); as search) {
+              <h3>{{ search.earliestFeasibleAge ? 'Earliest qualifying age: ' + search.earliestFeasibleAge : 'No tested age qualified' }}</h3>
+              <table class="sensitivity-table"><thead><tr><th>Age</th><th>Success</th><th>Consumption</th><th>Guardrail trigger</th><th>Qualifies</th></tr></thead><tbody>
+                @for (row of search.rows; track row.retirementAge) {<tr [class.current]="row.qualifies"><td>{{ row.retirementAge }}</td><td>{{ row.successProbability * 100 | number:'1.0-0' }}%</td><td>{{ row.consumptionRealization * 100 | number:'1.0-0' }}%</td><td>{{ row.guardrailTriggerRate * 100 | number:'1.0-0' }}%</td><td>{{ row.qualifies ? 'Yes' : 'No' }}</td></tr>}
+              </tbody></table>
+            }
+          </mat-card-content>
+        </mat-card>
+      </section>
+
       <section class="mc-chart">
         <mat-card>
           <mat-card-header><mat-card-title>After-Tax Assets by Age — Percentile Fan</mat-card-title></mat-card-header>
@@ -249,6 +273,9 @@ import { LocalStateService } from '../../core/services/local-state.service';
     .sensitivity-table th, .sensitivity-table td { padding: 8px 12px; border: 1px solid #dde5ec; text-align: left; }
     .sensitivity-table thead th { background: #f2f6fa; }
     .sensitivity-table tr.current { background: #eef4fb; font-weight: 600; }
+    .search-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:12px; }
+    .search-grid label { display:flex; flex-direction:column; gap:4px; font-size:.85rem; }
+    .search-grid input { padding:7px; }
     @media print {
       button, .guardrail-toggle, .guardrail-example, .mc-loading, .mc-error, .export-group { display: none !important; }
       mat-card { box-shadow: none !important; border: 1px solid #ddd; margin-bottom: 24px; page-break-inside: avoid; }
@@ -261,6 +288,7 @@ import { LocalStateService } from '../../core/services/local-state.service';
 })
 export class MonteCarlo {
   private readonly state = inject(LocalStateService);
+  private readonly worker = inject(MonteCarloWorkerService);
   readonly trials = DEFAULT_MONTE_CARLO_TRIALS;
   readonly scenario = this.state.scenario;
   readonly result = signal<MonteCarloResult | null>(null);
@@ -279,7 +307,16 @@ export class MonteCarlo {
   // second full-precision run.
   private static readonly SENSITIVITY_TRIALS = 2000;
   readonly sensitivityRunning = signal(false);
-  readonly sensitivityResult = signal<{ label: string; successProbability: number; isBase: boolean }[] | null>(null);
+  readonly sensitivityResult = signal<{ label: string; noGuardrail: number; guardrail: number; isBase: boolean }[] | null>(null);
+
+
+  readonly retirementAgeRunning = signal(false);
+  readonly retirementAgeResult = signal<RetirementAgeSearchResult | null>(null);
+  retirementSearchMinAge = Math.ceil(this.state.scenario().currentAge);
+  retirementSearchMaxAge = Math.max(this.retirementSearchMinAge, this.state.scenario().retirementAge + 10);
+  retirementSuccessThreshold = 0.85;
+  retirementConsumptionThreshold = 0.90;
+  retirementPlanningAge = 95;
 
   readonly longevityRunning = signal(false);
   readonly longevityResult = signal<{ age: number; successProbability: number; isBase: boolean }[] | null>(null);
@@ -323,10 +360,10 @@ export class MonteCarlo {
     const useGuardrail = this.useGuardrail;
     try {
       this.lastSeed = Date.now();
-      const result = await runMonteCarloSmoothIncomeTargetAsync(
+      const result = await this.worker.run(
         scenario, accounts, this.trials, this.lastSeed, useGuardrail,
-        (done) => this.progress.set(done),
       );
+      this.progress.set(this.trials);
       this.result.set(result);
       this.resultUsedGuardrail.set(useGuardrail);
     } catch (err) {
@@ -341,34 +378,58 @@ export class MonteCarlo {
   // assumption without editing the scenario and re-running by hand. Reuses the main run's
   // result for the base case rather than recomputing it.
   async runSensitivity(): Promise<void> {
-    const mainResult = this.result();
-    if (!mainResult) return;
+    if (!this.result()) return;
     this.sensitivityRunning.set(true);
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
-    const useGuardrail = this.resultUsedGuardrail();
     const seed = this.lastSeed || Date.now();
     try {
-      const [low, high] = await Promise.all([
-        runMonteCarloSmoothIncomeTargetAsync(
-          { ...scenario, assumedReturnRate: scenario.assumedReturnRate - 0.01 },
-          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail,
-        ),
-        runMonteCarloSmoothIncomeTargetAsync(
-          { ...scenario, assumedReturnRate: scenario.assumedReturnRate + 0.01 },
-          accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail,
-        ),
-      ]);
-      const pct = (n: number) => `${Math.round(n * 100)}%`;
-      this.sensitivityResult.set([
-        { label: `${pct(scenario.assumedReturnRate - 0.01)} return`, successProbability: low.successProbability, isBase: false },
-        { label: `${pct(scenario.assumedReturnRate)} return (as run above)`, successProbability: mainResult.successProbability, isBase: true },
-        { label: `${pct(scenario.assumedReturnRate + 0.01)} return`, successProbability: high.successProbability, isBase: false },
-      ]);
+      const rates = [scenario.assumedReturnRate - 0.01, scenario.assumedReturnRate, scenario.assumedReturnRate + 0.01];
+      const rows = [];
+      for (const rate of rates) {
+        const candidate = { ...scenario, assumedReturnRate: rate };
+        const [noGuardrail, guardrail] = await Promise.all([
+          this.worker.run(candidate, accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, false),
+          this.worker.run(candidate, accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, true),
+        ]);
+        rows.push({
+          label: `${Math.round(rate * 100)}% return`,
+          noGuardrail: noGuardrail.successProbability,
+          guardrail: guardrail.successProbability,
+          isBase: Math.abs(rate - scenario.assumedReturnRate) < 1e-9,
+        });
+      }
+      this.sensitivityResult.set(rows);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Sensitivity run failed.');
     } finally {
       this.sensitivityRunning.set(false);
+    }
+  }
+
+  async runRetirementAgeSearch(): Promise<void> {
+    this.retirementAgeRunning.set(true);
+    this.retirementAgeResult.set(null);
+    try {
+      const result = await this.worker.searchRetirementAge(
+        this.state.scenario(),
+        this.state.accounts(),
+        this.retirementSearchMinAge,
+        this.retirementSearchMaxAge,
+        {
+          minimumSuccessRate: this.retirementSuccessThreshold,
+          minimumConsumptionRealization: this.retirementConsumptionThreshold,
+          planningAge: this.retirementPlanningAge,
+        },
+        MonteCarlo.SENSITIVITY_TRIALS,
+        this.lastSeed || Date.now(),
+        this.useGuardrail,
+      );
+      this.retirementAgeResult.set(result);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Retirement-age search failed.');
+    } finally {
+      this.retirementAgeRunning.set(false);
     }
   }
 
@@ -385,7 +446,7 @@ export class MonteCarlo {
       const results = await Promise.all(targetAges.map(age => 
         age === scenario.lifeExpectancy 
           ? mainResult 
-          : runMonteCarloSmoothIncomeTargetAsync(
+          : this.worker.run(
               { ...scenario, lifeExpectancy: age },
               accounts, MonteCarlo.SENSITIVITY_TRIALS, seed, useGuardrail
             )
