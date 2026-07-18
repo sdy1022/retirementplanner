@@ -245,31 +245,6 @@ function createTrialRunner(scenario: Scenario, accounts: AccountSnapshot[], seed
       strategy: resolvedStrategy,
       returnRateForYear: sampleReturn,
       guardrail,
-<<<<<<< HEAD
-=======
-      stateTaxRate: scenario.stateTaxRate,
-      wageIncome: scenario.wageIncome,
-      annualOtherIncome: scenario.annualOtherIncome,
-      annualLivingExpenses: scenario.annualLivingExpenses,
-      annualPreTaxContribution: scenario.annualPreTaxContribution,
-      annualRothContribution: scenario.annualRothContribution,
-      annualBrokerageContribution: scenario.annualBrokerageContribution,
-      employerMatch: scenario.employerMatch,
-      retirementAge: scenario.retirementAge,
-      ssPia: scenario.ssPia,
-      ssClaimAge: scenario.ssClaimAge,
-      ssColaRate: scenario.ssColaRate,
-      preSimulationMagi: scenario.preSimulationMagi,
-      spouseCurrentAge: scenario.spouseCurrentAge,
-      spouseLifeExpectancy: scenario.spouseLifeExpectancy,
-      spouseSsPia: scenario.spouseSsPia,
-      spouseSsClaimAge: scenario.spouseSsClaimAge,
-      allowPreRetirementConversions,
-      annualWageGrowth: scenario.annualWageGrowth,
-      spendingOrder,
-      dividendYield: scenario.dividendYield,
-      sblocTaxFunding: scenario.sblocTaxFunding,
->>>>>>> 4f9ba46450b10872fcbb0b59240a54580a41cb8b
     });
     const last = years.at(-1);
     const actualConsumption = years.reduce((sum, y) => sum + y.expensesFromSs + y.expensesFromRmd + y.expensesFromTraditional + y.expensesFromBrokerage + y.expensesFromRoth, 0);
