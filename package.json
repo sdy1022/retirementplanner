@@ -8,6 +8,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadless",
+    "test:golden": "ng test --watch=false --browsers=ChromeHeadless --include=src/app/core/golden-scenarios/**/*.spec.ts",
     "check:conflicts": "grep -RIn --exclude-dir=node_modules --exclude-dir=.git -E '^(<<<<<<< .+|=======|>>>>>>> .+)$' src .github package.json angular.json tsconfig*.json && exit 1 || exit 0"
   },
   "prettier": {
