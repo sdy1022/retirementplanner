@@ -31,7 +31,7 @@ import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-cal
           <mat-form-field><mat-label>Employee Roth Contribution</mat-label><input matInput type="number" formControlName="annualRothContribution" /></mat-form-field>
           <mat-form-field><mat-label>Annual Brokerage Savings</mat-label><input matInput type="number" formControlName="annualBrokerageContribution" /></mat-form-field>
           <mat-form-field><mat-label>Other income (interest/non-qual div)</mat-label><input matInput type="number" formControlName="annualOtherIncome" /></mat-form-field>
-          <mat-form-field><mat-label>Annual expenses</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
+          <mat-form-field><mat-label>Annual expenses (working & retirement)</mat-label><input matInput type="number" formControlName="annualLivingExpenses" /></mat-form-field>
           <mat-form-field><mat-label>Birth year</mat-label><input matInput type="number" formControlName="birthYear" /></mat-form-field>
           <mat-form-field><mat-label>SS claim age</mat-label><input matInput type="number" formControlName="ssClaimAge" /></mat-form-field>
           <mat-form-field><mat-label>Monthly SS benefit at claim age</mat-label><input matInput type="number" formControlName="ssPia" /></mat-form-field>

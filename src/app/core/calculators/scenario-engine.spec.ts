@@ -207,6 +207,47 @@ describe('scenario-engine', () => {
     expect(byAge.get(65)!.irmaa).toBe(4901.36);
   });
 
+  it('passes working-year contributions through runScenario to the engine', () => {
+    // Regression test: the Scenario Builder collected the four contribution fields and the
+    // engine supported them, but runScenario's pass-through list dropped them — so the
+    // dashboard and Monte Carlo silently ignored every 401k/Roth/brokerage contribution.
+    // Only engine-direct tests existed, which is why the gap went unnoticed.
+    const scenario: Scenario = {
+      name: 'Contributions',
+      currentAge: 55,
+      retirementAge: 56,
+      birthYear: 1971,
+      ssClaimAge: 67,
+      ssPia: 0,
+      lifeExpectancy: 55,
+      filingStatus: 'single',
+      rothConversionStrategy: { mode: 'none' },
+      assumedReturnRate: 0,
+      stateTaxRate: 0,
+      wageIncome: 100000,
+      annualLivingExpenses: 30000,
+      annualPreTaxContribution: 20000,
+      annualRothContribution: 10000,
+      annualBrokerageContribution: 10000,
+      employerMatch: 5000,
+    };
+    const result = runScenario(scenario, [
+      { type: 'traditional_ira', balance: 100000, snapshotDate: '2026-01-01' },
+      { type: 'roth_ira', balance: 50000, snapshotDate: '2026-01-01' },
+      { type: 'brokerage', balance: 50000, costBasis: 50000, snapshotDate: '2026-01-01' },
+    ]);
+    const [year] = result.years;
+    // Pre-tax contribution reduces taxable wages: $100k - $20k = $80k -> $8,770 federal.
+    expect(year.taxableIncome).toBe(80000);
+    expect(year.federalTax).toBe(8770);
+    // Traditional grows by employee pre-tax + match; Roth by the Roth contribution.
+    expect(year.traditionalBalance).toBe(125000); // 100k + 20k + 5k
+    expect(year.rothBalance).toBe(60000); // 50k + 10k
+    // Brokerage grows by its contribution plus the unspent wage cash after expenses,
+    // contributions, and taxes: 100k - 30k - 40k = 30k gross, minus 8,770 tax = 21,230.
+    expect(year.brokerageBalance).toBe(81230); // 50k + 10k + 21,230
+  });
+
   it('applies Social Security COLA from the simulation start (and freezes at ssColaRate 0)', () => {
     const scenario: Scenario = {
       name: 'SS COLA',

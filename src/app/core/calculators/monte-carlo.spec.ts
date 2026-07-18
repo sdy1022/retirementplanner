@@ -105,6 +105,29 @@ describe('monte-carlo', () => {
     expect(withGuardrail.successProbability).toBeGreaterThan(withoutGuardrail.successProbability);
   });
 
+  it('passes working-year contributions through to the trials (regression for the dropped pass-through)', () => {
+    // Same seed, same market paths — the only difference is $30k/yr of pre-tax
+    // contributions plus a $5k match during five working years, which must leave the
+    // trials richer. Failed silently before the contribution fields were added to
+    // createTrialRunner's pass-through list.
+    const workingScenario: Scenario = {
+      ...wellFundedScenario,
+      currentAge: 55,
+      retirementAge: 60,
+      wageIncome: 150000,
+      annualLivingExpenses: 40000,
+    };
+    const without = runMonteCarloSmoothIncomeTarget(workingScenario, wellFundedAccounts, 100, 31, false);
+    const withContrib = runMonteCarloSmoothIncomeTarget(
+      { ...workingScenario, annualPreTaxContribution: 30000, employerMatch: 5000 },
+      wellFundedAccounts,
+      100,
+      31,
+      false,
+    );
+    expect(withContrib.meanEndingAssets).toBeGreaterThan(without.meanEndingAssets);
+  });
+
   it('the guardrail is a no-op for a comfortably funded plan (rarely enters cut mode, so results are close)', () => {
     const without = runMonteCarloSmoothIncomeTarget(wellFundedScenario, wellFundedAccounts, 500, 21, false);
     const withG = runMonteCarloSmoothIncomeTarget(wellFundedScenario, wellFundedAccounts, 500, 21, true);

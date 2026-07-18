@@ -43,3 +43,4 @@ Thumbs.db
 
 # Local secrets
 .env
+test_output.txt
