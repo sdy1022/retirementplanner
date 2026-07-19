@@ -405,6 +405,7 @@ export class MonteCarlo {
       this.lastSeed = Date.now();
       const result = await this.worker.run(
         scenario, accounts, this.trials, this.lastSeed, useGuardrail,
+        (p) => this.progress.set(p.completed),
       );
       this.progress.set(this.trials);
       this.result.set(result);

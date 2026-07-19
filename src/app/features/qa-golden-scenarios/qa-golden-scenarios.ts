@@ -1,12 +1,13 @@
 import { CurrencyPipe, DecimalPipe, PercentPipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { runScenario } from '../../core/calculators/scenario-engine';
+import { simulateConversionStrategy } from '../../core/calculators/roth-conversion-calculator';
 import { runMonteCarloSmoothIncomeTarget, runMonteCarloStochasticLongevity } from '../../core/calculators/monte-carlo';
-import { createPortfolioReturnSampler, createSeededRng } from '../../core/calculators/monte-carlo-returns';
+import { createPortfolioMarketSampler, createPortfolioReturnSampler, createSeededRng, HISTORICAL_US_INFLATION_RATES } from '../../core/calculators/monte-carlo-returns';
 import { findEarliestFeasibleRetirementAge } from '../../core/calculators/retirement-age-search';
 import { MonteCarloWorkerService } from '../../core/services/monte-carlo-worker.service';
 import {
@@ -30,19 +31,14 @@ interface QaScenarioResult { name: string; durationMs: number; pass: boolean; ch
       <span><strong>Seed:</strong> {{ seed }}</span><span><strong>Worker API:</strong> {{ workerAvailable ? 'available' : 'unavailable' }}</span><span><strong>Location:</strong> {{ location }}</span>
     </mat-card-content></mat-card>
     @if (running()) { <div class="running"><mat-spinner diameter="36"></mat-spinner><span>Running golden scenarios. Monte Carlo checks can take several seconds.</span></div> }
-    @if (!running() && results().length) {
-      <p class="summary" [class.summary-pass]="passedCount() === results().length" [class.summary-fail]="passedCount() !== results().length">
-        {{ passedCount() }} of {{ results().length }} production checks passed
-      </p>
-    }
     <section class="result-grid">
       @for (result of results(); track result.name) {
         <mat-card [class.pass]="result.pass" [class.fail]="!result.pass">
-          <mat-card-header><mat-icon>{{ result.pass ? 'check_circle' : 'error' }}</mat-icon><mat-card-title>{{ result.name }}</mat-card-title><mat-card-subtitle>{{ result.durationMs | number:'1.0-0' }} ms · {{ result.pass ? 'PASS' : 'FAIL' }}</mat-card-subtitle></mat-card-header>
+          <mat-card-header><mat-icon>{{ result.pass ? 'check_circle' : 'error' }}</mat-icon><mat-card-title>{{ result.name }}</mat-card-title><mat-card-subtitle>{{ result.durationMs | number:'1.0-0' }} ms</mat-card-subtitle></mat-card-header>
           <mat-card-content>
             @if (result.error) { <p class="error-text">{{ result.error }}</p> }
             <table><thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Status</th></tr></thead><tbody>
-              @for (check of result.checks; track check.label) {<tr><td>{{ check.label }}</td><td>{{ check.expected }}</td><td>{{ check.actual }}</td><td class="status-cell"><mat-icon [class.ok]="check.pass" [class.bad]="!check.pass">{{ check.pass ? 'check' : 'close' }}</mat-icon><span [class.ok]="check.pass" [class.bad]="!check.pass">{{ check.pass ? 'PASS' : 'FAIL' }}</span></td></tr>}
+              @for (check of result.checks; track check.label) {<tr><td>{{ check.label }}</td><td>{{ check.expected }}</td><td>{{ check.actual }}</td><td><span class="status-text" [class.ok]="check.pass" [class.bad]="!check.pass"><mat-icon>{{ check.pass ? 'check' : 'close' }}</mat-icon>{{ check.pass ? 'PASS' : 'FAIL' }}</span></td></tr>}
             </tbody></table>
           </mat-card-content>
         </mat-card>
@@ -56,11 +52,8 @@ interface QaScenarioResult { name: string; durationMs: number; pass: boolean; ch
     .running { display:flex; gap:14px; align-items:center; margin:20px 0; }
     .result-grid { display:grid; gap:16px; margin-top:16px; }
     mat-card.pass { border-left:5px solid #2e7d32; } mat-card.fail { border-left:5px solid #c62828; }
-    .summary { margin:16px 0 0; font-size:1.1rem; font-weight:600; }
-    .summary-pass { color:#2e7d32; } .summary-fail { color:#c62828; }
-    .status-cell { white-space:nowrap; } .status-cell mat-icon { vertical-align:middle; margin-right:4px; }
-    .status-cell span.ok { color:#2e7d32; font-weight:600; } .status-cell span.bad { color:#c62828; font-weight:600; }
     mat-card-header mat-icon { margin-right:10px; } .pass mat-card-header mat-icon,.ok { color:#2e7d32; } .fail mat-card-header mat-icon,.bad,.error-text { color:#c62828; }
+    .status-text { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
     table { width:100%; border-collapse:collapse; margin-top:12px; } th,td { text-align:left; padding:9px; border-bottom:1px solid #e1e5eb; } th { color:#4d5968; }
     @media(max-width:720px){.header{align-items:flex-start;flex-direction:column}.result-grid{overflow:auto}table{min-width:680px}}
   `,
@@ -72,13 +65,13 @@ export class QaGoldenScenarios {
   readonly location = typeof window === 'undefined' ? 'server' : window.location.href;
   readonly running = signal(false);
   readonly results = signal<QaScenarioResult[]>([]);
-  readonly passedCount = computed(() => this.results().filter((r) => r.pass).length);
 
   async runAll(): Promise<void> {
     this.running.set(true); this.results.set([]);
     const runners: Array<() => Promise<QaScenarioResult> | QaScenarioResult> = [
       () => this.runAccumulation(), () => this.runAggregation(), () => this.runPortfolio(),
       () => this.runSensitivity(), () => this.runRetirementSearch(), () => this.runWorkerParity(), () => this.runStochasticLongevity(),
+      () => this.runSurvivorRmd(), () => this.runHistoricalInflation(),
     ];
     for (const runner of runners) {
       try { const result = await runner(); this.results.update((r: QaScenarioResult[]) => [...r, result]); }
@@ -94,7 +87,7 @@ export class QaGoldenScenarios {
   private runAggregation():QaScenarioResult { const start=performance.now(); const y=runScenario(aggregationScenario,aggregationAccounts).years[0]; return this.result('2. Multiple same-type account aggregation',start,[this.check('Traditional','$500,000',String(y.traditionalBalance),y.traditionalBalance===500000),this.check('Roth','$150,000',String(y.rothBalance),y.rothBalance===150000),this.check('Brokerage','$100,000',String(y.brokerageBalance),y.brokerageBalance===100000),this.check('Brokerage basis','$65,000',String(y.brokerageBasis),y.brokerageBasis===65000),this.check('Total','$750,000',String(y.endingAssets),y.endingAssets===750000)]); }
   private stats(stockAllocation:number,count=20000){const sampler=createPortfolioReturnSampler(createSeededRng(GOLDEN_SEED),0.06,stockAllocation);const v=Array.from({length:count},()=>sampler());const mean=v.reduce((s,x)=>s+x,0)/v.length;const sd=Math.sqrt(v.reduce((s,x)=>s+(x-mean)**2,0)/v.length);return{mean,sd}}
   private runPortfolio():QaScenarioResult { const start=performance.now(); const stock=this.stats(1),balanced=this.stats(.6); return this.result('3. Paired stock/bond historical simulation',start,[this.check('All-stock volatility','19.4564%',(stock.sd*100).toFixed(4)+'%',Math.abs(stock.sd-0.1945641084)<1e-8),this.check('60/40 volatility','12.1420%',(balanced.sd*100).toFixed(4)+'%',Math.abs(balanced.sd-0.1214204489)<1e-8),this.check('60/40 materially lower','< 80% of all-stock',((balanced.sd/stock.sd)*100).toFixed(1)+'%',balanced.sd<stock.sd*.8)]); }
-  private runSensitivity():QaScenarioResult { const start=performance.now(); const expectedOff=[224/300,268/300,284/300],expectedOn=[264/300,285/300,295/300];const rates=[.05,.06,.07];const checks:QaCheck[]=[];rates.forEach((rate,i)=>{const scenario={...monteCarloScenario,assumedReturnRate:rate};const off=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,false);const on=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,true);const rateLabel=`${Math.round(rate*100)}%`;checks.push(this.check(`${rateLabel} / guardrail off`,(expectedOff[i]*100).toFixed(2)+'%',(off.successProbability*100).toFixed(2)+'%',off.successProbability===expectedOff[i]));checks.push(this.check(`${rateLabel} / guardrail on`,(expectedOn[i]*100).toFixed(2)+'%',(on.successProbability*100).toFixed(2)+'%',on.successProbability===expectedOn[i]));});return this.result('4. Return × Guardrail six-cell sensitivity',start,checks); }
+  private runSensitivity():QaScenarioResult { const start=performance.now(); const expectedOff=[224/300,268/300,284/300],expectedOn=[264/300,285/300,295/300];const rates=[.05,.06,.07];const checks:QaCheck[]=[];rates.forEach((rate,i)=>{const scenario={...monteCarloScenario,assumedReturnRate:rate};const off=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,false);const on=runMonteCarloSmoothIncomeTarget(scenario,monteCarloAccounts,300,GOLDEN_SEED,true);checks.push(this.check(`${Number((rate * 100).toFixed(1))}% / guardrail off`,(expectedOff[i]*100).toFixed(2)+'%',(off.successProbability*100).toFixed(2)+'%',off.successProbability===expectedOff[i]));checks.push(this.check(`${Number((rate * 100).toFixed(1))}% / guardrail on`,(expectedOn[i]*100).toFixed(2)+'%',(on.successProbability*100).toFixed(2)+'%',on.successProbability===expectedOn[i]));});return this.result('4. Return × Guardrail six-cell sensitivity',start,checks); }
   private runRetirementSearch():QaScenarioResult { const start=performance.now(); const result=findEarliestFeasibleRetirementAge(retirementSearchScenario,retirementSearchAccounts,58,62,{minimumSuccessRate:.75,minimumConsumptionRealization:.9,maximumGuardrailTriggerRate:.9,planningAge:95},250,GOLDEN_SEED,true);return this.result('5. Earliest feasible retirement age',start,[this.check('Age rows','58, 59, 60, 61, 62',result.rows.map(r=>r.retirementAge).join(', '),result.rows.map(r=>r.retirementAge).join(',')==='58,59,60,61,62'),this.check('Earliest qualifying age','59',String(result.earliestFeasibleAge),result.earliestFeasibleAge===59),this.check('Success-rate vector','71.6%, 80.0%, 87.2%, 92.0%, 96.0%',result.rows.map(r=>(r.successProbability*100).toFixed(1)+'%').join(', '),JSON.stringify(result.rows.map(r=>r.successProbability))===JSON.stringify([.716,.8,.872,.92,.96]))]); }
 
   private async runStochasticLongevity():Promise<QaScenarioResult> {
@@ -106,6 +99,32 @@ export class QaGoldenScenarios {
       this.check('Median death age','84',String(direct.longevityStats.medianPrimaryDeathAge),direct.longevityStats.medianPrimaryDeathAge===84),
       this.check('10th–90th percentile death age','71–93',`${direct.longevityStats.p10LastSurvivorAge}–${direct.longevityStats.p90LastSurvivorAge}`,direct.longevityStats.p10LastSurvivorAge===71&&direct.longevityStats.p90LastSurvivorAge===93),
       this.check('Worker parity',direct.meanEndingAssets.toFixed(2),viaWorker.meanEndingAssets.toFixed(2),direct.meanEndingAssets===viaWorker.meanEndingAssets),
+    ]);
+  }
+
+  private runSurvivorRmd(): QaScenarioResult {
+    const start = performance.now();
+    const accounts = [{ type: 'traditional_ira' as const, balance: 100000, snapshotDate: '2026-01-01' }];
+    const common = { accounts, strategy:{mode:'none' as const}, filingStatus:'married_filing_jointly' as const, assumedReturnRate:0, stateTaxRate:0, annualLivingExpenses:0, wageIncome:0 };
+    const younger = simulateConversionStrategy({ ...common, currentAge:74, endAge:75, birthYear:1952, primaryLifeExpectancy:74, spouseCurrentAge:70, spouseBirthYear:1956, spouseLifeExpectancy:90 });
+    const older = simulateConversionStrategy({ ...common, currentAge:70, endAge:71, birthYear:1956, primaryLifeExpectancy:70, spouseCurrentAge:74, spouseBirthYear:1952, spouseLifeExpectancy:90 });
+    return this.result('8. Survivor RMD ownership', start, [
+      this.check('Primary death-year RMD', '$3,921.57', younger[0].rmd.toFixed(2), younger[0].rmd === 3921.57),
+      this.check('Younger spouse next-year RMD', '$0', younger[1].rmd.toFixed(2), younger[1].rmd === 0),
+      this.check('Older spouse next-year RMD', '$4,065.04', older[1].rmd.toFixed(2), older[1].rmd === 4065.04),
+    ]);
+  }
+
+  private runHistoricalInflation(): QaScenarioResult {
+    const start = performance.now();
+    const index = 1974 - 1928;
+    const draw = createPortfolioMarketSampler(() => (index + 0.5) / 98, 0.06, 0.6)();
+    const years = simulateConversionStrategy({ accounts:[], strategy:{mode:'none'}, currentAge:67, endAge:68, birthYear:1959, filingStatus:'single', assumedReturnRate:0, stateTaxRate:0, annualLivingExpenses:10000, ssPia:1000, ssClaimAge:67, ssColaRate:.99, inflationRateForYear:()=>.10 });
+    return this.result('9. Historical inflation semantics', start, [
+      this.check('Joint sampled year', '1974', String(draw.historicalYear), draw.historicalYear === 1974),
+      this.check('1974 CPI', '11.1%', (draw.inflationRate*100).toFixed(1)+'%', draw.inflationRate === HISTORICAL_US_INFLATION_RATES[index]),
+      this.check('Next-year planned expenses', '$11,000', String(years[1].plannedLivingExpenses), years[1].plannedLivingExpenses === 11000),
+      this.check('Historical CPI overrides configured SS COLA', '$11,000 funded by SS', String(years[1].expensesFromSs), years[1].expensesFromSs === 11000),
     ]);
   }
 

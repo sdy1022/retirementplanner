@@ -1,5 +1,0 @@
-Merge branch 'main' of https://github.com/sdy1022/retirementplanner
-
-# Conflicts:
-#	src/app/core/calculators/monte-carlo.ts
-#	src/app/core/calculators/scenario-engine.ts

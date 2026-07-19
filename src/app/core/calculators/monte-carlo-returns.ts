@@ -116,3 +116,59 @@ export function createPortfolioReturnSampler(
   );
   return createReturnSampler(rng, targetGeometricMean, portfolioHistory, meanBlockLength);
 }
+
+// US CPI-U annual-average inflation, aligned year-for-year with the 1928-2025
+// stock and Treasury arrays above. Source: BLS CPI-U annual averages as
+// published by the Federal Reserve Bank of Minneapolis. Values are decimal rates.
+export const HISTORICAL_US_INFLATION_RATES: readonly number[] = [
+  -0.012, 0.000, -0.027, -0.089, -0.103, -0.052, 0.035, 0.026, 0.010, 0.037,
+  -0.020, -0.013, 0.007, 0.051, 0.109, 0.060, 0.016, 0.023, 0.085, 0.144,
+  0.077, -0.010, 0.011, 0.079, 0.023, 0.008, 0.003, -0.003, 0.015, 0.033,
+  0.027, 0.011, 0.015, 0.011, 0.012, 0.012, 0.013, 0.016, 0.030, 0.028,
+  0.043, 0.055, 0.058, 0.043, 0.033, 0.062, 0.111, 0.091, 0.057, 0.065,
+  0.076, 0.113, 0.135, 0.103, 0.061, 0.032, 0.043, 0.035, 0.019, 0.037,
+  0.041, 0.048, 0.054, 0.042, 0.030, 0.030, 0.026, 0.028, 0.030, 0.023,
+  0.016, 0.022, 0.034, 0.028, 0.016, 0.023, 0.027, 0.034, 0.032, 0.029,
+  0.038, -0.004, 0.016, 0.032, 0.021, 0.015, 0.016, 0.001, 0.013, 0.021,
+  0.024, 0.018, 0.012, 0.047, 0.080, 0.041, 0.029, 0.026,
+];
+
+export interface HistoricalMarketDraw {
+  historicalYear: number;
+  returnRate: number;
+  inflationRate: number;
+}
+
+/**
+ * Joint stock/bond/inflation stationary block bootstrap. A single historical
+ * index drives all three values, preserving stagflation and recovery regimes.
+ * The portfolio return is geometrically shifted to the scenario target; CPI is
+ * never shifted.
+ */
+export function createPortfolioMarketSampler(
+  rng: () => number,
+  targetGeometricMean: number,
+  stockAllocation: number,
+  meanBlockLength: number = DEFAULT_MEAN_BLOCK_LENGTH,
+): () => HistoricalMarketDraw {
+  if (HISTORICAL_US_INFLATION_RATES.length !== HISTORICAL_SP500_ANNUAL_RETURNS.length) {
+    throw new Error('Historical market and inflation series must be aligned.');
+  }
+  const stockWeight = Math.min(1, Math.max(0, stockAllocation));
+  const portfolioHistory = HISTORICAL_SP500_ANNUAL_RETURNS.map((stock, index) =>
+    stockWeight * stock + (1 - stockWeight) * HISTORICAL_10Y_TREASURY_ANNUAL_RETURNS[index],
+  );
+  const shift = shiftForGeometricMean(targetGeometricMean, portfolioHistory);
+  const count = portfolioHistory.length;
+  let index = -1;
+  return () => {
+    index = index >= 0 && rng() >= 1 / meanBlockLength
+      ? (index + 1) % count
+      : Math.floor(rng() * count);
+    return {
+      historicalYear: 1928 + index,
+      returnRate: portfolioHistory[index] + shift,
+      inflationRate: HISTORICAL_US_INFLATION_RATES[index],
+    };
+  };
+}

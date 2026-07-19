@@ -2,7 +2,7 @@ import { AccountSnapshot, Scenario, YearResult } from '../models/retirement.mode
 import { simulateConversionStrategy, sumAccounts } from './roth-conversion-calculator';
 import { engineInputFromScenario } from './engine-input-mapper';
 import { RESIDUAL_TRADITIONAL_TAX_RATE, runScenario } from './scenario-engine';
-import { createPortfolioReturnSampler, createSeededRng } from './monte-carlo-returns';
+import { createPortfolioMarketSampler, createPortfolioReturnSampler, createSeededRng, HistoricalMarketDraw } from './monte-carlo-returns';
 import { MortalitySex, SSA_MORTALITY_SOURCE } from '../mortality/ssa-period-life-table';
 import { deriveSeed, sampleDeathAge } from '../mortality/mortality-sampler';
 import { createGuardrail, GuardrailOptions } from './spending-guardrail';
@@ -10,6 +10,13 @@ import { createGuardrail, GuardrailOptions } from './spending-guardrail';
 // 5,000 trials pins the success probability to roughly ±1% while keeping a full run to a
 // few seconds; the async runner below chunks the work so the UI never freezes regardless.
 export const DEFAULT_MONTE_CARLO_TRIALS = 5000;
+
+export interface SimulationProgress {
+  completed: number;
+  total: number;
+  phase: 'monte-carlo' | 'stochastic-longevity' | 'retirement-age-search';
+}
+export type ProgressCallback = (progress: SimulationProgress) => void;
 
 // Trials simulated per chunk before yielding the main thread back to the browser
 const TRIALS_PER_CHUNK = 250;
@@ -110,6 +117,7 @@ export function runMonteCarloSmoothIncomeTarget(
   trials = DEFAULT_MONTE_CARLO_TRIALS,
   seed = Date.now(),
   useGuardrail = false,
+  onProgress?: ProgressCallback,
 ): MonteCarloResult {
   const runTrial = createTrialRunner(scenario, accounts, seed, useGuardrail);
   const endingAssets: number[] = new Array(trials);
@@ -121,6 +129,7 @@ export function runMonteCarloSmoothIncomeTarget(
   const totalShortfalls: number[] = new Array(trials);
   const consumptionRealizations: number[] = new Array(trials);
   let successes = 0;
+  const progressStep = Math.max(100, Math.floor(trials / 100));
   for (let i = 0; i < trials; i++) {
     const trial = runTrial();
     if (trial.success) successes++;
@@ -132,6 +141,7 @@ export function runMonteCarloSmoothIncomeTarget(
     totalShortfalls[i] = trial.totalShortfall;
     consumptionRealizations[i] = trial.consumptionRealization;
     if (i === 0) ages.push(...trial.ages);
+    if (onProgress && ((i + 1) % progressStep === 0 || i + 1 === trials)) onProgress({ completed: i + 1, total: trials, phase: 'monte-carlo' });
   }
   return summarize(endingAssets, successes, assetsPerTrial, ages, successFlags, yearsInCutMode, maxConsecutiveCuts, totalShortfalls, consumptionRealizations, useGuardrail);
 }
@@ -145,6 +155,7 @@ export function runMonteCarloStochasticLongevity(
   trials = DEFAULT_MONTE_CARLO_TRIALS,
   seed = Date.now(),
   useGuardrail = false,
+  onProgress?: ProgressCallback,
 ): StochasticLongevityResult {
   const runTrial = createTrialRunner(scenario, accounts, seed, useGuardrail, undefined, options);
   const endings: number[] = [];
@@ -153,6 +164,7 @@ export function runMonteCarloStochasticLongevity(
   const firstAges: number[] = [];
   const lastAges: number[] = [];
   let successes = 0;
+  const progressStep = Math.max(100, Math.floor(trials / 100));
   for (let i = 0; i < trials; i++) {
     const trial = runTrial();
     if (trial.success) successes++;
@@ -161,6 +173,7 @@ export function runMonteCarloStochasticLongevity(
     if (trial.spouseDeathAge !== undefined) spouseAges.push(trial.spouseDeathAge);
     firstAges.push(trial.firstDeathAge ?? trial.lastSurvivorAge ?? Math.floor(scenario.lifeExpectancy));
     lastAges.push(trial.lastSurvivorAge ?? Math.floor(scenario.lifeExpectancy));
+    if (onProgress && ((i + 1) % progressStep === 0 || i + 1 === trials)) onProgress({ completed: i + 1, total: trials, phase: 'stochastic-longevity' });
   }
   const sort = (values: number[]) => [...values].sort((a, b) => a - b);
   const sortedEndings = sort(endings);
@@ -341,7 +354,24 @@ function createTrialRunner(
     const marketRng = longevityOptions
       ? createSeededRng(deriveSeed(seed, `market-${thisTrial}`))
       : rng;
-    const sampleReturn = createPortfolioReturnSampler(marketRng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1);
+    const historicalInflation = scenario.inflationMode === 'historical';
+    const marketSampler = historicalInflation
+      ? createPortfolioMarketSampler(marketRng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1)
+      : undefined;
+    const fixedReturnSampler = historicalInflation
+      ? undefined
+      : createPortfolioReturnSampler(marketRng, scenario.assumedReturnRate, scenario.stockAllocation ?? 1);
+    const marketPath: HistoricalMarketDraw[] = [];
+    const marketAt = (yearIndex: number): HistoricalMarketDraw => {
+      while (marketPath.length <= yearIndex) marketPath.push(marketSampler!());
+      return marketPath[yearIndex];
+    };
+    const sampleReturn = (_age: number, yearIndex: number) => historicalInflation
+      ? marketAt(yearIndex).returnRate
+      : fixedReturnSampler!();
+    const sampleInflation = historicalInflation
+      ? (_age: number, yearIndex: number) => marketAt(yearIndex).inflationRate
+      : undefined;
     const rawGuardrail = useGuardrail ? createGuardrail(beginningAssetsBaselineByAge, guardrailOptions) : undefined;
     // Records which simulated years the guardrail actually cut spending, without changing
     // its decisions — lets the trial report guardrail trigger frequency/duration alongside
@@ -370,12 +400,13 @@ function createTrialRunner(
       strategy: resolvedStrategy,
       primaryLifeExpectancy: primaryDeathAge,
       returnRateForYear: sampleReturn,
+      inflationRateForYear: sampleInflation,
       guardrail,
     });
     const last = years.at(-1);
     const actualConsumption = years.reduce((sum, y) => sum + y.expensesFromSs + y.expensesFromRmd + y.expensesFromTraditional + y.expensesFromBrokerage + y.expensesFromRoth, 0);
-    const trialPlannedConsumption = longevityOptions
-      ? years.reduce((sum, y) => sum + (scenario.annualLivingExpenses ?? 0) * Math.pow(1.03, y.age - Math.floor(scenario.currentAge)), 0)
+    const trialPlannedConsumption = scenario.inflationMode === 'historical' || longevityOptions
+      ? years.reduce((sum, y) => sum + (y.plannedLivingExpenses ?? y.livingExpenses), 0)
       : plannedConsumption;
     return {
       success: years.every((y) => y.shortfall <= 0.01),

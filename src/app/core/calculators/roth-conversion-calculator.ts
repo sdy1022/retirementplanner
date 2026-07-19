@@ -16,6 +16,9 @@ export interface ConversionSimulationInput {
   // given simulated age/year-index instead of the flat assumedReturnRate. When absent, every
   // year grows at assumedReturnRate (the existing deterministic behavior).
   returnRateForYear?: (age: number, yearIndex: number) => number;
+  // Historical CPI draw paired with the sampled market year. When present, expenses
+  // and Social Security COLA use this path; tax-table/IRMAA indexing remains policy-based.
+  inflationRateForYear?: (age: number, yearIndex: number) => number;
   stateTaxRate: number;
   annualLivingExpenses?: number;
   annualOtherIncome?: number;
@@ -45,6 +48,7 @@ export interface ConversionSimulationInput {
   // spouse can be the last survivor.
   primaryLifeExpectancy?: number;
   spouseCurrentAge?: number;
+  spouseBirthYear?: number;
   spouseLifeExpectancy?: number;
   // Spouse monthly benefit at the spouse's claim age (already claiming-age-adjusted)
   spouseSsPia?: number;
@@ -95,7 +99,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
   const sbloc = input.sblocTaxFunding;
   let sblocLoanBalance = 0;
   const results: YearResult[] = [];
-  const rmdStartAge = getRmdStartAge(input.birthYear);
+  const primaryRmdStartAge = getRmdStartAge(input.birthYear);
+  const spouseRmdStartAge = input.spouseBirthYear == null ? undefined : getRmdStartAge(input.spouseBirthYear);
+  let expenseInflationFactor = 1;
+  let socialSecurityColaFactor = 1;
   const magiByAge = new Map<number, number>();
   // Simulate whole attained-age years: fractional input ages are floored so table lookups
   // (RMD divisors, bracket indexing) always see integer ages instead of falling through
@@ -111,9 +118,6 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const guardrailDecision = input.guardrail?.({ age, beginningAssets }) ?? { livingExpenseMultiplier: 1, pauseConversion: false };
     // Wages grow by a flat dollar raise each working year
     const currentWage = isRetired ? 0 : Math.max(0, (input.wageIncome ?? 0) + (input.annualWageGrowth ?? 0) * (age - startAge));
-    const divisor = UNIFORM_LIFETIME_DIVISORS[age] ?? UNIFORM_LIFETIME_DIVISORS[120];
-    // Beginning-of-year balance (≈ prior Dec 31 after growth), matching the IRS RMD basis
-    const rmd = age >= rmdStartAge ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor)) : 0;
     // Spouse survivorship: the spouse is alive through the year they reach their life
     // expectancy (final joint return), and the plan files single from the next year on.
     const spouseModeled = input.filingStatus === 'married_filing_jointly'
@@ -123,10 +127,25 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const bothAlive = primaryAlive && spouseAlive;
     const filingStatus: FilingStatus = spouseModeled && !bothAlive ? 'single' : input.filingStatus;
 
+    // RMD ownership follows the surviving spouse after a spousal rollover. Under the
+    // engine's existing convention, the death year is still the decedent's final year;
+    // the survivor's age and SECURE 2.0 start schedule apply beginning the next year.
+    const spouseIsSoleSurvivor = spouseModeled && !primaryAlive && spouseAlive;
+    const activeRmdAge = spouseIsSoleSurvivor ? spouseAgeNow! : age;
+    const activeRmdStartAge = spouseIsSoleSurvivor
+      ? (spouseRmdStartAge ?? primaryRmdStartAge)
+      : primaryRmdStartAge;
+    const divisor = UNIFORM_LIFETIME_DIVISORS[activeRmdAge] ?? UNIFORM_LIFETIME_DIVISORS[120];
+    const rmd = activeRmdAge >= activeRmdStartAge
+      ? Math.min(traditionalBalance, roundCurrency(traditionalBalance / divisor))
+      : 0;
+
     // Benefits as entered (already adjusted for each claim age), indexed by COLA from the
     // simulation's first year — SSA applies COLA to the record before and after claiming.
     // While both spouses are alive their benefits add; the survivor keeps the larger one.
-    const ssColaFactor = Math.pow(1 + (input.ssColaRate ?? DEFAULT_SS_COLA_RATE), age - startAge);
+    const ssColaFactor = input.inflationRateForYear
+      ? socialSecurityColaFactor
+      : Math.pow(1 + (input.ssColaRate ?? DEFAULT_SS_COLA_RATE), age - startAge);
     const primarySsStream = (primaryAlive && input.ssPia && input.ssClaimAge && age >= input.ssClaimAge) ? roundCurrency(input.ssPia * 12 * ssColaFactor) : 0;
     const spouseSsStream = (spouseModeled && spouseAlive && input.spouseSsPia && input.spouseSsClaimAge && spouseAgeNow! >= input.spouseSsClaimAge)
       ? roundCurrency(input.spouseSsPia * 12 * ssColaFactor)
@@ -151,7 +170,10 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // top of the 12% bracket (harvesting the cheap space), then brokerage, then more traditional,
     // then Roth. All traditional slices are ordinary income, so they join the tax base before the
     // conversion decision and consume bracket room that would otherwise go to conversions.
-    const livingExpenses = roundCurrency((input.annualLivingExpenses ?? 0) * Math.pow(1 + EXPENSE_INFLATION_RATE, Math.max(0, age - startAge)) * guardrailDecision.livingExpenseMultiplier);
+    const plannedLivingExpenses = roundCurrency((input.annualLivingExpenses ?? 0) * (input.inflationRateForYear
+      ? expenseInflationFactor
+      : Math.pow(1 + EXPENSE_INFLATION_RATE, Math.max(0, age - startAge))));
+    const livingExpenses = roundCurrency(plannedLivingExpenses * guardrailDecision.livingExpenseMultiplier);
     const actualPreTaxContrib = isRetired
       ? 0
       : Math.min(currentWage, Math.max(0, input.annualPreTaxContribution ?? 0));
@@ -195,7 +217,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     const canConvert = (isRetired || (input.allowPreRetirementConversions ?? false)) && !guardrailDecision.pauseConversion;
     const preserveFloor = input.strategy.mode === 'fill-to-income' ? (input.strategy.preserveFloor ?? 0) : 0;
     const conversionCap = Math.max(0, traditionalBalance - rmd - fromTraditional - preserveFloor);
-    const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, filingStatus, taxYear, age, rmdStartAge, inflationFactor)) : 0;
+    const conversion = canConvert ? Math.min(conversionCap, conversionAmount(input.strategy, baseTaxableIncome, filingStatus, taxYear, activeRmdAge, activeRmdStartAge, inflationFactor)) : 0;
     // Exact Social Security taxability via the provisional-income formula, now that all
     // non-SS ordinary income is known (below the 85% sizing estimate in low-income years)
     const nonSsOrdinaryIncome = currentWage - actualPreTaxContrib + (input.annualOtherIncome ?? 0) + rmd + fromTraditional + conversion;
@@ -454,6 +476,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       shortfall,
       marginalRate,
       livingExpenses,
+      plannedLivingExpenses,
       endingAssets: roundCurrency(traditionalBalance + rothBalance + brokerageBalance),
       expensesFromSs: roundCurrency(Math.min(ssIncome, livingExpenses)),
       expensesFromRmd: roundCurrency(Math.min(rmd, Math.max(0, livingExpenses - ssIncome - currentWage))),
@@ -470,6 +493,14 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
       sblocLoanBalance,
       sblocPaydown,
     });
+
+    // Historical CPI for year N affects the next year's nominal expenses and the next
+    // Social Security COLA. This one-year lag mirrors the fixed-mode compounding convention.
+    if (input.inflationRateForYear) {
+      const sampledInflation = Math.max(-0.99, input.inflationRateForYear(age, age - startAge));
+      expenseInflationFactor *= 1 + sampledInflation;
+      socialSecurityColaFactor *= 1 + sampledInflation;
+    }
   }
 
   return results;

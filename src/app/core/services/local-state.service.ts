@@ -20,6 +20,7 @@ const defaultScenario: Scenario = {
   rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
   assumedReturnRate: 0.08,
   stockAllocation: 0.6,
+  inflationMode: 'fixed',
   stateTaxRate: 0.0495,
   wageIncome: 100000,
   annualOtherIncome: 0,
@@ -42,7 +43,10 @@ export class LocalStateService {
   private loadScenario(): Scenario {
     if (typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem('scenario');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Scenario;
+        return { ...parsed, inflationMode: parsed.inflationMode ?? 'fixed' };
+      }
     }
     return defaultScenario;
   }

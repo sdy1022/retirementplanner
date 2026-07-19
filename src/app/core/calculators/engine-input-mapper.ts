@@ -33,6 +33,7 @@ export function engineInputFromScenario(
     ssColaRate: scenario.ssColaRate,
     preSimulationMagi: scenario.preSimulationMagi,
     spouseCurrentAge: scenario.spouseCurrentAge,
+    spouseBirthYear: scenario.spouseBirthYear ?? (scenario.spouseCurrentAge != null ? (scenario.birthYear + Math.floor(scenario.currentAge) - Math.floor(scenario.spouseCurrentAge)) : undefined),
     spouseLifeExpectancy: scenario.spouseLifeExpectancy,
     spouseSsPia: scenario.spouseSsPia,
     spouseSsClaimAge: scenario.spouseSsClaimAge,

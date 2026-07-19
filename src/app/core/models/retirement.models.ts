@@ -2,6 +2,7 @@ export type FilingStatus = 'single' | 'married_filing_jointly';
 export type AccountType = 'traditional_401k' | 'traditional_ira' | 'roth_401k' | 'roth_ira' | 'brokerage';
 
 export type AccountOwner = 'primary' | 'spouse' | 'joint';
+export type InflationMode = 'fixed' | 'historical';
 
 export interface AccountSnapshot {
   id?: string;
@@ -54,6 +55,9 @@ export interface Scenario {
   // penalty") and the survivor keeps the LARGER of the two Social Security benefits.
   // All balances roll to the survivor. Leave unset to keep MFJ for the whole plan.
   spouseCurrentAge?: number;
+  // Explicit birth year is required for the survivor's SECURE 2.0 RMD start age.
+  // Legacy scenarios may omit it; the mapper derives an approximate value from current age.
+  spouseBirthYear?: number;
   spouseLifeExpectancy?: number;
   // Spouse's monthly benefit at the spouse's claim age (already claiming-age-adjusted)
   spouseSsPia?: number;
@@ -65,6 +69,9 @@ export interface Scenario {
   // Scenario-level portfolio allocation used by Monte Carlo. All accounts share this
   // allocation in v1 and are rebalanced annually. Defaults to 100% stocks for legacy data.
   stockAllocation?: number;
+  // Fixed preserves legacy 3% expense inflation and configured SS COLA. Historical replays
+  // CPI from the same sampled year/block as stocks and bonds. Defaults to fixed.
+  inflationMode?: InflationMode;
   stateTaxRate: number;
   wageIncome: number;
   // Interest and non-qualified dividends taxed as ordinary income every year
@@ -137,6 +144,8 @@ export interface YearResult {
   shortfall: number;
   marginalRate: number;
   livingExpenses: number;
+  // Uncut amount before guardrail adjustment; used for consumption-realization metrics.
+  plannedLivingExpenses?: number;
   endingAssets: number;
   // Funding sources for the year's living expenses
   expensesFromSs: number;

@@ -31,9 +31,12 @@ export function findEarliestFeasibleRetirementAge(
   trials: number,
   seed: number,
   useGuardrail: boolean,
+  onProgress?: (completed: number, total: number) => void,
 ): RetirementAgeSearchResult {
   const rows: RetirementAgeRow[] = [];
-  for (let age = Math.max(Math.ceil(scenario.currentAge), Math.ceil(minimumAge)); age <= maximumAge; age++) {
+  const firstAge = Math.max(Math.ceil(scenario.currentAge), Math.ceil(minimumAge));
+  const totalAges = Math.max(0, Math.floor(maximumAge) - firstAge + 1);
+  for (let age = firstAge; age <= maximumAge; age++) {
     const candidate: Scenario = { ...scenario, retirementAge: age, lifeExpectancy: criteria.planningAge };
     const result: MonteCarloResult = runMonteCarloSmoothIncomeTarget(candidate, accounts, trials, seed, useGuardrail);
     const consumption = result.guardrailStats?.meanConsumptionRealization ?? 1;
@@ -42,6 +45,7 @@ export function findEarliestFeasibleRetirementAge(
       && consumption >= criteria.minimumConsumptionRealization
       && (criteria.maximumGuardrailTriggerRate == null || trigger <= criteria.maximumGuardrailTriggerRate);
     rows.push({ retirementAge: age, successProbability: result.successProbability, consumptionRealization: consumption, guardrailTriggerRate: trigger, qualifies });
+    onProgress?.(rows.length, totalAges);
   }
   return { earliestFeasibleAge: rows.find((row) => row.qualifies)?.retirementAge, rows, criteria };
 }
