@@ -22,9 +22,17 @@ describe('monte-carlo', () => {
     { type: 'brokerage' as const, balance: 500000, snapshotDate: '2026-01-01' },
   ];
 
-  it('rejects scenarios that are not smooth-income-target', () => {
-    const scenario: Scenario = { ...wellFundedScenario, rothConversionStrategy: { mode: 'none' } };
-    expect(() => runMonteCarloSmoothIncomeTarget(scenario, wellFundedAccounts, 10, 1)).toThrow();
+  it('rejects unsupported strategy modes but accepts "none" for no-conversion comparisons', () => {
+    // Search modes other than smooth-income-target are still unsupported
+    const fixedAmount: Scenario = { ...wellFundedScenario, rothConversionStrategy: { mode: 'fixed-amount', amount: 50000 } };
+    expect(() => runMonteCarloSmoothIncomeTarget(fixedAmount, wellFundedAccounts, 10, 1)).toThrow();
+    // 'none' must run: the strategy-comparison page uses it as the no-conversion variant
+    // (this used to throw, breaking that page's advertised comparison at runtime)
+    const noConversion: Scenario = { ...wellFundedScenario, rothConversionStrategy: { mode: 'none' } };
+    const result = runMonteCarloSmoothIncomeTarget(noConversion, wellFundedAccounts, 50, 1);
+    expect(result.trials).toBe(50);
+    expect(result.successProbability).toBeGreaterThanOrEqual(0);
+    expect(result.successProbability).toBeLessThanOrEqual(1);
   });
 
   it('runs the requested number of trials and returns a well-formed result', () => {

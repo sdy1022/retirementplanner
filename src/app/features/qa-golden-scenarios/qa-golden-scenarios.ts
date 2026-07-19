@@ -1,4 +1,4 @@
-import { CurrencyPipe, DecimalPipe, PercentPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -22,7 +22,7 @@ interface QaScenarioResult { name: string; durationMs: number; pass: boolean; ch
 
 @Component({
   selector: 'app-qa-golden-scenarios',
-  imports: [CurrencyPipe, DecimalPipe, PercentPipe, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [DecimalPipe, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule],
   template: `
     <section class="header">
       <div><h1>Production Golden Scenarios</h1><p>Runs fixed, deterministic QA fixtures against the production calculation bundle. This route does not alter saved accounts or scenarios.</p></div>

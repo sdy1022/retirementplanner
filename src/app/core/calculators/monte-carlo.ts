@@ -280,8 +280,12 @@ function createTrialRunner(
   guardrailOptions?: GuardrailOptions,
   longevityOptions?: StochasticLongevityOptions,
 ): () => TrialOutcome {
-  if (scenario.rothConversionStrategy.mode !== 'smooth-income-target') {
-    throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy only.');
+  // 'none' is accepted alongside smooth-income-target so the strategy-comparison page can
+  // run a no-conversion variant against the same seed; runScenario's passthrough branch
+  // resolves it as-is. Other search modes remain unsupported here.
+  const mode = scenario.rothConversionStrategy.mode;
+  if (mode !== 'smooth-income-target' && mode !== 'none') {
+    throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy (or "none" for a no-conversion comparison) only.');
   }
 
   const base = runScenario(scenario, accounts);

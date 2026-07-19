@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from './core/services/auth.service';
+import { DEFAULT_TAX_YEAR } from './core/calculators/tax-tables';
 
 @Component({
   selector: 'app-root',
@@ -128,6 +129,15 @@ import { AuthService } from './core/services/auth.service';
 })
 export class App {
   readonly auth = inject(AuthService);
+
+  constructor() {
+    // Non-blocking staleness reminder (see DATA_REFRESH.md): embedded tax/IRMAA/market
+    // data needs an annual refresh. A warning, not a build failure — final IRS/CMS
+    // figures usually aren't published the day the calendar year changes.
+    if (new Date().getFullYear() > DEFAULT_TAX_YEAR + 1) {
+      console.warn(`Embedded tax, Medicare, and market data target ${DEFAULT_TAX_YEAR}; see DATA_REFRESH.md for the annual update checklist.`);
+    }
+  }
 
   async signOut() {
     try {

@@ -1,4 +1,4 @@
-import { createReturnSampler, createPortfolioReturnSampler, createSeededRng, geometricMean, historicalMean, HISTORICAL_SP500_ANNUAL_RETURNS, shiftForGeometricMean } from './monte-carlo-returns';
+import { createPortfolioMarketSampler, createReturnSampler, createPortfolioReturnSampler, createSeededRng, geometricMean, historicalMean, HISTORICAL_SP500_ANNUAL_RETURNS, shiftForGeometricMean } from './monte-carlo-returns';
 
 describe('monte-carlo-returns', () => {
   it('createSeededRng is deterministic for a given seed and stays within [0, 1)', () => {
@@ -142,5 +142,29 @@ describe('portfolio return sampler', () => {
       return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
     };
     expect(sd(balanced)).toBeLessThan(sd(stocks));
+  });
+});
+
+describe('same-seed path sharing (strategy comparison invariant)', () => {
+  it('variants that differ only in allocation see the identical historical-year sequence', () => {
+    // The strategy-comparison page's whole premise: two variants started from the same
+    // seed must walk the same historical years, so outcome differences come only from the
+    // strategy inputs. The sampler's rng consumption is allocation-independent (the
+    // continue/jump decision never looks at the portfolio), so the year sequences — and
+    // therefore the CPI draws — must match element for element.
+    const a = createPortfolioMarketSampler(createSeededRng(20260718), 0.06, 1.0);
+    const b = createPortfolioMarketSampler(createSeededRng(20260718), 0.06, 0.4);
+    for (let i = 0; i < 2000; i++) {
+      const drawA = a();
+      const drawB = b();
+      expect(drawA.historicalYear).toBe(drawB.historicalYear);
+      expect(drawA.inflationRate).toBe(drawB.inflationRate);
+    }
+  });
+
+  it('the same sampler configuration replayed from the same seed is exactly reproducible', () => {
+    const first = Array.from({ length: 500 }, createPortfolioMarketSampler(createSeededRng(11), 0.07, 0.6));
+    const second = Array.from({ length: 500 }, createPortfolioMarketSampler(createSeededRng(11), 0.07, 0.6));
+    expect(first).toEqual(second);
   });
 });
