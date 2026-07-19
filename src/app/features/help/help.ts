@@ -73,6 +73,35 @@ import { MatTabsModule } from '@angular/material/tabs';
             </iframe>
           </div>
         </mat-tab>
+
+        <mat-tab label="维护与模型边界">
+          <div class="tab-content">
+            <div class="manual-toolbar">
+              <div>
+                <h2>v1.0 维护与模型边界</h2>
+                <p>用于年度数据刷新、结果解释、专业复核和后续版本维护。</p>
+              </div>
+            </div>
+            <section class="resource-grid">
+              <a class="resource-card" href="/docs/DATA_REFRESH.md" target="_blank" rel="noopener noreferrer">
+                <mat-icon>update</mat-icon>
+                <span><strong>年度数据刷新清单</strong><small>IRS、CMS、SSA、股债与 CPI 更新位置及验收步骤</small></span>
+              </a>
+              <a class="resource-card" href="/docs/MODEL_ASSUMPTIONS_AND_LIMITATIONS.md" target="_blank" rel="noopener noreferrer">
+                <mat-icon>policy</mat-icon>
+                <span><strong>模型假设与局限</strong><small>成功率含义、历史抽样、税务简化和未建模事项</small></span>
+              </a>
+              <a class="resource-card" href="/qa/golden-scenarios" target="_blank" rel="noopener noreferrer">
+                <mat-icon>verified</mat-icon>
+                <span><strong>Production Golden QA</strong><small>确认线上计算 bundle 与固定基准一致</small></span>
+              </a>
+              <a class="resource-card" href="/compare-strategies" target="_blank" rel="noopener noreferrer">
+                <mat-icon>compare_arrows</mat-icon>
+                <span><strong>同 Seed 策略对比</strong><small>在共享市场、通胀和寿命随机流下比较方案</small></span>
+              </a>
+            </section>
+          </div>
+        </mat-tab>
       </mat-tab-group>
     </section>
   `,
@@ -154,6 +183,34 @@ import { MatTabsModule } from '@angular/material/tabs';
     .chinese-manual {
       min-height: 78vh;
     }
+    .resource-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .resource-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid #d7dde5;
+      border-radius: 10px;
+      color: #263241;
+      text-decoration: none;
+      background: #fbfdff;
+    }
+    .resource-card:hover {
+      border-color: #87a8cc;
+      background: #f2f7fc;
+    }
+    .resource-card span {
+      display: grid;
+      gap: 5px;
+    }
+    .resource-card small {
+      color: #59697a;
+      line-height: 1.5;
+    }
     a mat-icon {
       margin-right: 6px;
     }
@@ -171,6 +228,9 @@ import { MatTabsModule } from '@angular/material/tabs';
       .manual-frame,
       .chinese-manual {
         min-height: 70vh;
+      }
+      .resource-grid {
+        grid-template-columns: 1fr;
       }
     }
   `

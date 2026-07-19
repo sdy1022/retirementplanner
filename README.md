@@ -181,3 +181,11 @@ This is a modeling tool, not financial or tax advice. Tax tables cover a single 
 ## âš ï¸ å…è´£å£°æ˜Ž
 
 æœ¬å·¥å…·ä»…ç”¨äºŽå»ºæ¨¡åˆ†æžï¼Œä¸æž„æˆè´¢åŠ¡æˆ–ç¨ŽåŠ¡å»ºè®®ã€‚ç¨Žè¡¨ä»…è¦†ç›–å•ä¸€ç”³æŠ¥èº«ä»½å’Œå¹´åº¦ï¼Œé¢„æµ‹ç»“æžœå®Œå…¨å–å†³äºŽä½ è¾“å…¥çš„å‡è®¾ã€‚åœ¨æ‰§è¡Œä»»ä½•ç­–ç•¥å‰ï¼Œè¯·å’¨è¯¢åˆæ ¼çš„ä¸“ä¸šäººå£«ã€‚
+
+## v1.0 maintenance documentation
+
+- [Annual data refresh checklist](DATA_REFRESH.md)
+- [Model assumptions and limitations](MODEL_ASSUMPTIONS_AND_LIMITATIONS.md)
+- [Same-seed comparison semantics](SAME_SEED_STRATEGY_COMPARISON.md)
+- [v1.0 release checklist](RELEASE_V1.0.0.md)
+- Archived one-off scripts and early design notes are under [`docs/archive/`](docs/archive/).

@@ -72,7 +72,9 @@
   <a href="#quickstart">20. 推荐使用流程</a>
   <a href="#interpretation">21. 如何解读结果</a>
   <a href="#limitations">22. 边界与免责声明</a>
-  <a href="#technical">23. 技术架构</a>
+  <a href="#maintenance">23. 年度数据维护</a>
+  <a href="#model-assumptions">24. 模型假设与局限</a>
+  <a href="#technical">25. 技术架构</a>
 </nav>
 
 <main>
@@ -401,8 +403,36 @@ npm run build</code></pre>
   <div class="warning"><strong>使用原则：</strong>把工具用于发现风险、比较方向、准备问题和制定年度检查清单；在执行大额 conversion、借款、退休或 Social Security 决策前，咨询合格专业人士。</div>
 </section>
 
+<section id="maintenance" class="content">
+  <h2>23. 年度数据维护与刷新</h2>
+  <p>v1.0 之后，模型进入“稳定功能 + 年度数据刷新”阶段。税表、标准扣除、长期资本利得断点、IRMAA、SSA 寿命表和历史市场序列都会随年份变化。</p>
+  <div class="grid">
+    <div class="mini"><h3>每年 10–11 月</h3><p>检查 IRS 新年度税档、标准扣除、资本利得断点、退休计划限额，以及 CMS 新年度 IRMAA 档位和保费。</p></div>
+    <div class="mini"><h3>每年数据完整后</h3><p>把最新完整年度的股票、10 年期国债和 CPI 一起追加，确保三组数据仍按同一日历年对齐。</p></div>
+    <div class="mini"><h3>SSA 更新时</h3><p>检查新版 period life table；不要在没有审查的情况下把 period 表替换成 cohort 表或个人化调整。</p></div>
+    <div class="mini"><h3>每次刷新后</h3><p>运行严格编译、全量测试、Golden、production build 和线上 Golden QA，并在 Release 中记录数据版本。</p></div>
+  </div>
+  <p><a href="/docs/DATA_REFRESH.md" target="_blank" rel="noopener">打开完整年度数据刷新清单</a></p>
+</section>
+
+<section id="model-assumptions" class="content">
+  <h2>24. 模型假设与局限</h2>
+  <p>成功率是模型条件下的模拟样本比例，不是个人现实世界中精确到 1% 的概率。确定性终值也不是未来资产承诺。最有价值的用途是比较方向、发现风险和准备年度决策。</p>
+  <h3>重点假设</h3>
+  <ul>
+    <li>历史股票、债券与 CPI 联合抽样保留历史关联，但未来不一定重复历史。</li>
+    <li>同 Seed Compare 共享随机路径，用于减少比较中的抽样噪音。</li>
+    <li>SSA period life table 是人口级数据，不是个人医疗寿命预测。</li>
+    <li>税务、IRMAA、Social Security、RMD 和遗属规则是规划模型，不能替代正式专业意见。</li>
+    <li>Guardrail 提高成功率可能伴随消费削减，必须同时查看 consumption realization。</li>
+  </ul>
+  <h3>v1.0 刻意未完整建模</h3>
+  <p>包括 LTC 随机冲击、cohort mortality、个体健康、完整 Roth 五年 tranche 规则、QCD、复杂 inherited IRA、所有税法 sunset、非合格股息/税 lot 和完整供款合规校验。</p>
+  <p><a href="/docs/MODEL_ASSUMPTIONS_AND_LIMITATIONS.md" target="_blank" rel="noopener">打开完整“模型假设与局限”文档</a></p>
+</section>
+
 <section id="technical" class="content">
-  <h2>23. 技术架构与部署</h2>
+  <h2>25. 技术架构与部署</h2>
   <div class="grid">
     <div class="mini"><h3>前端</h3><p>Angular 20 standalone components、Signals、Angular Material、ngx-charts。</p></div>
     <div class="mini"><h3>计算</h3><p>纯 TypeScript、不可变年度结果、框架无关函数、Web Worker。</p></div>
