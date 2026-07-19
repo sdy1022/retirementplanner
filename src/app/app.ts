@@ -3,11 +3,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from './core/services/auth.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatButtonModule, MatIconModule, MatToolbarModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatButtonModule, MatIconModule, MatToolbarModule, MatMenuModule],
   template: `
     <mat-toolbar class="shell-toolbar">
       <span class="brand">Retirement Strategy</span>
@@ -40,10 +41,25 @@ import { AuthService } from './core/services/auth.service';
           <mat-icon>verified</mat-icon>
           Golden QA
         </a>
-        <a mat-button routerLink="/help" routerLinkActive="active-link">
+        <button mat-button [matMenuTriggerFor]="helpMenu">
           <mat-icon>help</mat-icon>
           Help
-        </a>
+          <mat-icon>arrow_drop_down</mat-icon>
+        </button>
+        <mat-menu #helpMenu="matMenu">
+          <a mat-menu-item routerLink="/help">
+            <mat-icon>help_outline</mat-icon>
+            <span>Quick Help</span>
+          </a>
+          <a
+            mat-menu-item
+            href="/docs/readme-zh.html"
+            target="_blank"
+            rel="noopener noreferrer">
+            <mat-icon>menu_book</mat-icon>
+            <span>完整中文手册</span>
+          </a>
+        </mat-menu>
         @if (auth.currentUser()) {
           <button mat-button (click)="signOut()">
             <mat-icon>logout</mat-icon>
