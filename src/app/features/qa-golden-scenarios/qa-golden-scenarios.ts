@@ -9,6 +9,7 @@ import { simulateConversionStrategy } from '../../core/calculators/roth-conversi
 import { runMonteCarloSmoothIncomeTarget, runMonteCarloStochasticLongevity } from '../../core/calculators/monte-carlo';
 import { createPortfolioMarketSampler, createPortfolioReturnSampler, createSeededRng, HISTORICAL_US_INFLATION_RATES } from '../../core/calculators/monte-carlo-returns';
 import { findEarliestFeasibleRetirementAge } from '../../core/calculators/retirement-age-search';
+import { buildComparisonScenario } from '../../core/calculators/strategy-comparison';
 import { MonteCarloWorkerService } from '../../core/services/monte-carlo-worker.service';
 import {
   GOLDEN_SEED, accumulationAccounts, accumulationScenario, aggregationAccounts, aggregationScenario,
@@ -71,7 +72,7 @@ export class QaGoldenScenarios {
     const runners: Array<() => Promise<QaScenarioResult> | QaScenarioResult> = [
       () => this.runAccumulation(), () => this.runAggregation(), () => this.runPortfolio(),
       () => this.runSensitivity(), () => this.runRetirementSearch(), () => this.runWorkerParity(), () => this.runStochasticLongevity(),
-      () => this.runSurvivorRmd(), () => this.runHistoricalInflation(),
+      () => this.runSurvivorRmd(), () => this.runHistoricalInflation(), () => this.runSameSeedComparison(),
     ];
     for (const runner of runners) {
       try { const result = await runner(); this.results.update((r: QaScenarioResult[]) => [...r, result]); }
@@ -125,6 +126,20 @@ export class QaGoldenScenarios {
       this.check('1974 CPI', '11.1%', (draw.inflationRate*100).toFixed(1)+'%', draw.inflationRate === HISTORICAL_US_INFLATION_RATES[index]),
       this.check('Next-year planned expenses', '$11,000', String(years[1].plannedLivingExpenses), years[1].plannedLivingExpenses === 11000),
       this.check('Historical CPI overrides configured SS COLA', '$11,000 funded by SS', String(years[1].expensesFromSs), years[1].expensesFromSs === 11000),
+    ]);
+  }
+
+  private runSameSeedComparison(): QaScenarioResult {
+    const start = performance.now();
+    const option = { name:'Replay', retirementAge:monteCarloScenario.retirementAge, stockAllocation:monteCarloScenario.stockAllocation ?? 1, useGuardrail:false, conversionMode:'current' as const };
+    const scenario = buildComparisonScenario(monteCarloScenario, option);
+    const first = runMonteCarloSmoothIncomeTarget(scenario, monteCarloAccounts, 100, GOLDEN_SEED, option.useGuardrail);
+    const replay = runMonteCarloSmoothIncomeTarget(scenario, monteCarloAccounts, 100, GOLDEN_SEED, option.useGuardrail);
+    return this.result('10. Same-seed strategy comparison', start, [
+      this.check('Seed reused', String(GOLDEN_SEED), String(GOLDEN_SEED), true),
+      this.check('Success replay parity', String(first.successProbability), String(replay.successProbability), first.successProbability === replay.successProbability),
+      this.check('Median replay parity', first.endingAssetsPercentiles.p50.toFixed(2), replay.endingAssetsPercentiles.p50.toFixed(2), first.endingAssetsPercentiles.p50 === replay.endingAssetsPercentiles.p50),
+      this.check('Saved scenario remains unchanged', monteCarloScenario.name, monteCarloScenario.name, scenario !== monteCarloScenario && monteCarloScenario.name !== option.name),
     ]);
   }
 

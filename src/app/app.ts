@@ -32,6 +32,14 @@ import { AuthService } from './core/services/auth.service';
           <mat-icon>event_repeat</mat-icon>
           Tranches
         </a>
+        <a mat-button routerLink="/compare-strategies" routerLinkActive="active-link">
+          <mat-icon>compare_arrows</mat-icon>
+          Compare
+        </a>
+        <a mat-button routerLink="/qa/golden-scenarios" routerLinkActive="active-link">
+          <mat-icon>verified</mat-icon>
+          Golden QA
+        </a>
         <a mat-button href="/runningsteps_eng.html" target="_blank">
           <mat-icon>help</mat-icon>
           Help
