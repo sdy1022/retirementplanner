@@ -2,6 +2,8 @@ import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { Router } from '@angular/router';
 import { NgxChartsModule } from '@swimlane/ngx-charts';
 import { generateActionPlan, calculateMaxTraditionalBalanceForBracket } from '../../core/calculators/action-plan';
 import { LONG_TERM_CAPITAL_GAINS_RATE, sumAccounts, sumCostBasis } from '../../core/calculators/roth-conversion-calculator';
@@ -15,8 +17,50 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CurrencyPipe, DecimalPipe, MatButtonModule, MatCardModule, NgxChartsModule],
+  imports: [CurrencyPipe, DecimalPipe, MatButtonModule, MatCardModule, MatIconModule, NgxChartsModule],
   template: `
+    @if (!hasAccounts()) {
+      <div class="onboarding-container" id="dashboard-onboarding">
+        <mat-card class="onboarding-card">
+          <div class="onboarding-header">
+            <div class="logo-icon-wrap">
+              <mat-icon class="logo-icon">account_balance_wallet</mat-icon>
+            </div>
+            <h1>Retirement Strategy Planner</h1>
+            <p class="subtitle">Analyze your drawdown strategy, Roth conversions, RMDs, and stress-test your plan with Monte Carlo simulations.</p>
+          </div>
+          
+          <div class="onboarding-choices">
+            <div class="choice-card demo-choice">
+              <div class="choice-icon-wrap">
+                <mat-icon>rocket_launch</mat-icon>
+              </div>
+              <h3>Explore with Demo Data</h3>
+              <p>Instantly pre-populate the calculator with a sample $2.5M multi-account portfolio to see all charts, the year-by-year action plan, and Monte Carlo models in action.</p>
+              <button mat-flat-button color="primary" class="cta-btn" (click)="loadDemoData()">
+                <mat-icon>science</mat-icon> Load Demo Data
+              </button>
+            </div>
+
+            <div class="choice-card custom-choice">
+              <div class="choice-icon-wrap">
+                <mat-icon>tune</mat-icon>
+              </div>
+              <h3>Start from Scratch</h3>
+              <p>Input your own retirement accounts, wage income, living expenses, filing status, and tax strategy parameters to generate a custom projection.</p>
+              <div class="scratch-actions">
+                <button mat-stroked-button class="cta-btn" (click)="goToAccounts()">
+                  <mat-icon>account_balance</mat-icon> Add Accounts
+                </button>
+                <button mat-stroked-button class="cta-btn" (click)="goToScenario()">
+                  <mat-icon>settings</mat-icon> Build Scenario
+                </button>
+              </div>
+            </div>
+          </div>
+        </mat-card>
+      </div>
+    } @else {
     <section class="rmd-banner">
       <mat-card>
         <mat-card-content>
@@ -32,6 +76,9 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
             <button mat-button (click)="exportYearByYearCsv()" id="export-csv-btn">📥 Year-by-Year CSV</button>
             <button mat-button (click)="exportScenarioJson()" id="export-json-btn">📥 Scenario JSON</button>
             <button mat-button (click)="printReport()" id="print-report-btn">🖨️ Print PDF</button>
+            <button mat-button class="reset-btn" (click)="resetData()" id="reset-data-btn">
+              <mat-icon>restart_alt</mat-icon> Reset Data
+            </button>
           </span>
         </mat-card-content>
       </mat-card>
@@ -185,8 +232,149 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
         </mat-card-content>
       </mat-card>
     </section>
+    }
   `,
   styles: `
+    .onboarding-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: calc(100vh - 160px);
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .onboarding-card {
+      max-width: 900px;
+      width: 100%;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      padding: 40px 30px;
+      text-align: center;
+    }
+    .onboarding-header {
+      margin-bottom: 40px;
+    }
+    .logo-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      border-radius: 50px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+      color: #ffffff;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 14px rgba(30, 64, 175, 0.4);
+    }
+    .logo-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+    }
+    .onboarding-header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 10px;
+      letter-spacing: -0.025em;
+    }
+    .onboarding-header .subtitle {
+      font-size: 1.1rem;
+      color: #64748b;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .onboarding-choices {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .choice-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 30px 24px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .choice-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.1);
+    }
+    .choice-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+    .demo-choice .choice-icon-wrap {
+      background: #eff6ff;
+      color: #2563eb;
+    }
+    .custom-choice .choice-icon-wrap {
+      background: #f8fafc;
+      color: #475569;
+    }
+    .choice-card h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 12px;
+    }
+    .choice-card p {
+      font-size: 0.95rem;
+      color: #64748b;
+      line-height: 1.5;
+      margin: 0 0 24px;
+      flex-grow: 1;
+      text-align: center;
+    }
+    .choice-card .cta-btn {
+      width: 100%;
+      height: 44px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.95rem;
+    }
+    .choice-card .cta-btn mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      margin-right: 0;
+    }
+    .scratch-actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      width: 100%;
+    }
+    .demo-choice {
+      border-top: 4px solid #3b82f6;
+    }
+    @media (max-width: 768px) {
+      .onboarding-choices {
+        grid-template-columns: 1fr;
+      }
+      .onboarding-card {
+        padding: 30px 20px;
+      }
+      .onboarding-header h1 {
+        font-size: 1.8rem;
+      }
+    }
+
     .rmd-banner { margin-bottom: 20px; }
     .rmd-banner mat-card-content { min-height: unset; padding: 14px 16px; font-size: 1.05rem; }
     .rmd-banner .divider { margin: 0 10px; color: #b0bac4; }
@@ -210,16 +398,19 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
     .metric.sub { padding: 8px 0 8px 14px; font-size: 0.92rem; color: #5a6b7c; }
     .metric:last-child { border-bottom: 0; }
     .charts { display: grid; grid-template-columns: 1fr; gap: 20px; }
-    .export-group { display: inline-flex; gap: 6px; }
+    .export-group { display: inline-flex; gap: 6px; align-items: center; }
     .export-group button { font-size: 0.85rem; text-transform: none; }
+    .reset-btn { color: #b91c1c; border: 1px solid transparent; border-radius: 6px; transition: background 0.2s, border-color 0.2s; }
+    .reset-btn:hover { background: #fef2f2; border-color: #fca5a5; }
+    .reset-btn mat-icon { font-size: 16px; width: 16px; height: 16px; vertical-align: middle; margin-right: 4px; }
     mat-card-content { min-height: 280px; }
     @media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
     @media print {
       .export-group { display: none !important; }
+      .reset-btn { display: none !important; }
       mat-card { box-shadow: none !important; border: 1px solid #ddd; margin-bottom: 24px; page-break-inside: avoid; }
       .summary, .strategy-selector, .advice, .action-plan, .charts { display: block; }
       
-      /* Make Action Plan read-friendly */
       .action-plan { page-break-before: always; }
       .action-table { page-break-inside: auto; }
       .action-table tr { page-break-inside: avoid; page-break-after: auto; }
@@ -234,27 +425,42 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
 })
 export class Dashboard {
   private readonly state = inject(LocalStateService);
+  private readonly router = inject(Router);
   readonly taxDataYear = DEFAULT_TAX_YEAR;
   readonly scenario = this.state.scenario;
   readonly residualRateDefault = RESIDUAL_TRADITIONAL_TAX_RATE;
-  // SBLOC borrow rate assumed for the Buy-Borrow-Die comparison; not a scenario input yet
   readonly sblocBorrowRate = 0.07;
-  // BBD tax-funding window and loan cap: conversion taxes from 60–75 are borrowed against
-  // the brokerage, and draws stop once the loan hits 40% of the collateral
   readonly sblocStartAge = 60;
   readonly sblocEndAge = 75;
   readonly sblocMaxLtv = 0.4;
 
-  // Per-bucket decision: Rule 1 compares today's conversion rate against the exit rate on
-  // unconverted dollars; Rule 2 simulates borrow-vs-sell for the brokerage held to step-up.
-  // Spending is funded from the brokerage only once retired, so the horizon starts then.
+  readonly hasAccounts = computed(() => this.state.accounts().length > 0);
+
+  loadDemoData(): void {
+    this.state.loadSampleData();
+  }
+
+  goToAccounts(): void {
+    this.router.navigate(['/accounts']);
+  }
+
+  goToScenario(): void {
+    this.router.navigate(['/scenarios']);
+  }
+
+  resetData(): void {
+    const confirmed = window.confirm(
+      'This will clear all your accounts and scenario settings, returning to the welcome screen.\n\nAre you sure you want to reset?'
+    );
+    if (confirmed) {
+      this.state.clearAllData();
+    }
+  }
+
   readonly strategyDecision = computed(() => {
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
     const strategy = scenario.rothConversionStrategy;
-    // t_now = what the plan actually pays per converted dollar (conversions fill cheap
-    // brackets first, so this is usually well below the target bracket); the target
-    // bracket is only the fallback when the plan converts nothing
     const conversionRate = effectiveConversionRate(this.result().years, scenario.filingStatus, scenario.stateTaxRate)
       ?? ('targetBracket' in strategy ? strategy.targetBracket : 0.24);
     return selectStrategy({
@@ -268,7 +474,6 @@ export class Dashboard {
       expectedReturnRate: scenario.assumedReturnRate,
       yearsToDeath: Math.max(0, scenario.lifeExpectancy - Math.max(scenario.currentAge, scenario.retirementAge)),
       annualSpending: scenario.annualLivingExpenses,
-      // Roth can't be pledged as SBLOC collateral, but it can cure a stressed margin call
       backstopLiquidAssets: sumAccounts(accounts, ['roth_401k', 'roth_ira']),
     });
   });
@@ -284,8 +489,6 @@ export class Dashboard {
   });
   readonly result = computed(() => runScenario(this.state.scenario(), this.state.accounts()));
   readonly baseline = computed(() => runScenario({ ...this.state.scenario(), name: 'No conversion', rothConversionStrategy: { mode: 'none' } }, this.state.accounts()));
-  // Same scenario, but conversion taxes in the window are borrowed via SBLOC instead of
-  // selling brokerage (Buy-Borrow-Die applied to the tax bill)
   readonly sblocResult = computed(() => runScenario({
     ...this.state.scenario(),
     name: 'SBLOC-funded conversion taxes',
@@ -303,8 +506,6 @@ export class Dashboard {
   readonly sblocVerdict = computed(() => {
     const edge = this.sblocEdge();
     const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-    // Margin calls are cured in-engine (loan paid down from brokerage, then Roth), so the
-    // LTV cap only stays breached when even the Roth backstop couldn't cover the cure
     if (this.sblocPeakLtv() > this.sblocMaxLtv) {
       return `⚠️ Not feasible: even after forced paydowns the loan exceeds ${Math.round(this.sblocMaxLtv * 100)}% of the collateral (peak ${Math.round(this.sblocPeakLtv() * 100)}%). A lender would liquidate before age ${this.finalAge()}, so the ${fmt.format(Math.abs(edge))} difference shown is not achievable.`;
     }
@@ -315,8 +516,6 @@ export class Dashboard {
       ? `✅ Borrowing the conversion tax wins: the untouched brokerage outgrows the ${Math.round(this.sblocBorrowRate * 100)}% loan, leaving ${fmt.format(edge)} more after tax at ${this.finalAge()}.`
       : `❌ Paying the tax in cash wins: ${Math.round(this.sblocBorrowRate * 100)}% compounding loan interest costs ${fmt.format(-edge)} more than the gains tax and growth it avoids.`) + cureNote;
   });
-  // Charts plot the same winning run the action plan narrates (planResult), against the
-  // no-conversion baseline
   readonly rmdChart = computed(() => this.toSeries('RMD', this.planResult(), this.baseline(), 'rmd'));
   readonly assetChart = computed(() => {
     const res = this.planResult();
@@ -331,16 +530,11 @@ export class Dashboard {
       perAccount('Brokerage', 'brokerageBalance'),
       { name: 'Baseline total', series: this.baseline().years.map((year) => ({ name: String(year.age), value: year.endingAssets })) },
     ];
-    // endingAssets is gross of the SBLOC loan, so plot the compounding loan alongside
-    // the balances whenever the winning run borrowed conversion taxes
     if (res.years.some((year) => (year.sblocLoanBalance ?? 0) > 0)) {
       series.push({ name: 'SBLOC loan (owed)', series: res.years.map((year) => ({ name: String(year.age), value: year.sblocLoanBalance ?? 0 })) });
     }
     return series;
   });
-  // The action plan narrates the winning tax-funding strategy: the SBLOC (BBD) run when it
-  // is feasible (loan stayed within the LTV cap) and beats paying cash after tax, else the
-  // cash run. The comparison cards above still show both so the choice stays visible.
   readonly sblocWins = computed(() => this.sblocPeakLtv() <= this.sblocMaxLtv && this.sblocEdge() > 0);
   readonly planResult = computed(() => this.sblocWins() ? this.sblocResult() : this.result());
   readonly actionPlan = computed(() => generateActionPlan(this.planResult(), this.state.scenario().filingStatus));
@@ -355,15 +549,11 @@ export class Dashboard {
     return Math.max(0, (last?.brokerageBalance ?? 0) - (last?.brokerageBasis ?? 0));
   });
 
-  // Pre-tax traditional dollars are discounted by the residual liquidation rate, and
-  // unrealized brokerage gains by the gains rate (0 = heirs' step-up in basis), so
-  // strategy and baseline are compared in equivalent after-tax terms
   private afterTaxEndingAssets(result: ScenarioResult): number {
     const last = result.years.at(-1);
     const residualRate = this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE;
     const gainsRate = this.state.scenario().brokerageGainsTaxRate ?? 0;
     const unrealizedGain = Math.max(0, (last?.brokerageBalance ?? 0) - (last?.brokerageBasis ?? 0));
-    // Any outstanding SBLOC loan is settled by the estate before anything passes to heirs
     return (last?.endingAssets ?? 0) - (last?.traditionalBalance ?? 0) * residualRate - unrealizedGain * gainsRate - (last?.sblocLoanBalance ?? 0);
   }
   readonly traditionalAtRmdStart = computed(() => {
@@ -377,7 +567,6 @@ export class Dashboard {
     const advices = [];
 
     const taxDiff = base.totalTax - res.totalTax;
-    // Compare in after-tax terms so leftover pre-tax traditional doesn't inflate the baseline
     const assetsDiff = this.afterTaxEndingAssets(res) - this.afterTaxEndingAssets(base);
 
     const baseRmdTotal = base.years.reduce((sum, yr) => sum + yr.rmd, 0);
@@ -407,15 +596,13 @@ export class Dashboard {
       advices.push(`⚠️ RMD Insight: Your strategy did not reduce your RMDs significantly. Consider setting a higher target conversion bracket to drain your traditional accounts before RMD age.`);
     }
 
-    // Drain-down solver
     const strategy = this.state.scenario().rothConversionStrategy;
     const targetBracket = 'targetBracket' in strategy
       ? strategy.targetBracket
-      : 0.24; // Default to 24% for generic advice if auto-optimizing
+      : 0.24; 
 
     const rmdStartAge = getRmdStartAge(this.state.scenario().birthYear);
     const divisor = UNIFORM_LIFETIME_DIVISORS[rmdStartAge];
-    // Only 85% of Social Security is taxable, matching the simulation engine
     const ssIncome = this.state.scenario().ssPia * 12 * 0.85;
     const maxBalance = calculateMaxTraditionalBalanceForBracket(targetBracket, ssIncome, divisor, this.state.scenario().filingStatus, 2026);
 
@@ -455,13 +642,10 @@ export class Dashboard {
   private toSeries(label: string, result: ScenarioResult, baseline: ScenarioResult, key: 'rmd' | 'endingAssets') {
     return [
       { name: result.scenarioName, series: result.years.map((year) => ({ name: String(year.age), value: year[key] })) },
-      { name: `Baseline ${label}`, series: baseline.years.map((year) => ({ name: String(year.age), value: year[key] })) },
+      { name: `Baseline ${label}`, series: baseline.years.map((year) => ({ name: String(year.age), value: baseline.years.length > 0 ? (baseline.years[baseline.years.indexOf(year)] as any)[key] : 0 })) },
     ];
   }
 
-  // ── Export methods ────────────────────────────────────────────────────
-
-  /** Export year-by-year details as CSV with strategy + baseline side-by-side. */
   exportYearByYearCsv(): void {
     const scenario = this.state.scenario();
     const res = this.result();
@@ -497,7 +681,6 @@ export class Dashboard {
     downloadFile(exportFilename(scenario.name, 'csv'), csv, 'text/csv;charset=utf-8');
   }
 
-  /** Export scenario assumptions + accounts + full results as JSON backup. */
   exportScenarioJson(): void {
     const scenario = this.state.scenario();
     const accounts = this.state.accounts();
@@ -536,7 +719,6 @@ export class Dashboard {
     downloadFile(exportFilename(scenario.name, 'json'), json, 'application/json');
   }
 
-  /** Trigger browser native print to generate PDF */
   printReport(): void {
     window.print();
   }
