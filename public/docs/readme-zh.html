@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Retirement Strategy Planner 退休策略规划工具完整功能说明（中文分享版）" />
+  <title>退休策略规划工具｜完整功能说明</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;--paper:#fff;--ink:#142235;--muted:#5f6f82;--line:#dbe3ec;
+      --brand:#245d8f;--brand2:#0f766e;--soft:#eaf3fb;--warn:#9a5a00;--warnbg:#fff7e6;
+      --good:#176b43;--goodbg:#ebf8f1;--bad:#9b2c2c;--shadow:0 14px 40px rgba(28,47,70,.10);
+    }
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.72}
+    a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
+    .hero{background:linear-gradient(135deg,#183a59 0%,#245d8f 55%,#16837c 100%);color:#fff;padding:64px 24px 54px}
+    .hero-inner{max-width:1180px;margin:auto}.eyebrow{font-size:.86rem;letter-spacing:.13em;text-transform:uppercase;opacity:.82}.hero h1{font-size:clamp(2rem,4vw,3.55rem);line-height:1.15;margin:.55rem 0 1rem}.hero p{max-width:880px;font-size:1.12rem;opacity:.94;margin:0 0 1.5rem}
+    .actions{display:flex;flex-wrap:wrap;gap:12px}.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 17px;border-radius:9px;font-weight:700;border:1px solid rgba(255,255,255,.35);color:#fff;background:rgba(255,255,255,.12)}.btn.primary{background:#fff;color:#1d507b;border-color:#fff}.btn:hover{text-decoration:none;transform:translateY(-1px)}
+    .layout{max-width:1280px;margin:0 auto;padding:26px 20px 70px;display:grid;grid-template-columns:270px minmax(0,1fr);gap:26px}
+    nav{position:sticky;top:18px;align-self:start;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow);max-height:calc(100vh - 36px);overflow:auto}nav h2{font-size:1rem;margin:0 0 10px}nav a{display:block;padding:7px 9px;border-radius:7px;color:#405166;font-size:.91rem}nav a:hover{background:var(--soft);text-decoration:none;color:var(--brand)}
+    main{min-width:0}.card,section.content{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:28px;margin-bottom:24px}
+    h2{font-size:1.72rem;line-height:1.3;margin:0 0 18px;padding-top:4px}h3{font-size:1.2rem;margin:27px 0 9px}h4{font-size:1rem;margin:20px 0 8px}.lead{font-size:1.08rem;color:#36485d}.muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.mini{border:1px solid var(--line);background:#fbfdff;border-radius:12px;padding:16px}.mini h3,.mini h4{margin-top:0}.kpi{font-size:1.55rem;font-weight:800;color:var(--brand)}
+    .tag{display:inline-block;background:var(--soft);border:1px solid #cfe2f3;color:#245d8f;border-radius:999px;padding:3px 9px;margin:2px 4px 2px 0;font-size:.82rem;font-weight:650}.tag.green{background:#eaf8f5;border-color:#c8ebe4;color:#11655f}.tag.gold{background:#fff5df;border-color:#f0d69f;color:#875000}
+    table{border-collapse:collapse;width:100%;margin:13px 0;font-size:.94rem}th,td{border:1px solid var(--line);padding:10px 12px;vertical-align:top;text-align:left}th{background:#eef4f9;color:#31465c}tr:nth-child(even) td{background:#fbfcfe}
+    code{background:#edf2f7;border-radius:5px;padding:2px 5px;font-family:Consolas,Monaco,monospace;font-size:.9em}pre{overflow:auto;background:#122235;color:#e7f0fa;border-radius:11px;padding:16px;line-height:1.55}pre code{background:none;padding:0;color:inherit}
+    .note,.warning,.success{border-left:5px solid var(--brand);border-radius:9px;padding:14px 16px;margin:16px 0;background:var(--soft)}.warning{border-color:#d68b13;background:var(--warnbg);color:#654300}.success{border-color:#279267;background:var(--goodbg);color:#18583c}
+    ul,ol{padding-left:1.3rem}li{margin:.35rem 0}.step{counter-reset:item}.step>li{margin-bottom:.8rem}.route{font-family:Consolas,monospace;white-space:nowrap}
+    .footer{max-width:1180px;margin:0 auto 50px;padding:0 20px;color:var(--muted);text-align:center;font-size:.9rem}
+    .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.compare{overflow:auto}.check{color:var(--good);font-weight:700}.no{color:var(--bad);font-weight:700}
+    details{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;background:#fcfdff}summary{cursor:pointer;font-weight:700;color:#2b4560}
+    @media(max-width:980px){.layout{grid-template-columns:1fr}nav{position:relative;top:auto;max-height:none}.grid,.grid.three{grid-template-columns:1fr}.hero{padding-top:45px}}
+    @media print{body{background:#fff}.hero{background:#fff!important;color:#111;padding:18px 0;border-bottom:2px solid #333}.actions,nav{display:none}.layout{display:block;max-width:none;padding:0}.card,section.content{box-shadow:none;break-inside:avoid;border:1px solid #bbb}.footer{margin-top:20px}a{color:#111;text-decoration:underline}}
+  </style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Retirement Strategy Planner · 中文分享版</div>
+    <h1>退休策略规划工具<br>完整功能说明</h1>
+    <p>这是一个在浏览器中运行的退休规划与税务策略建模工具。它把账户、现金流、Roth 转换、RMD、社会保障金、IRMAA、遗属阶段、随机市场、随机通胀与随机寿命放在同一套可重复、可测试的模型中，帮助用户比较方案，而不是只看一个“看起来很精确”的终值。</p>
+    <div class="actions">
+      <a class="btn primary" href="https://retirementplanner-seven.vercel.app/dashboard" target="_blank" rel="noopener">打开在线工具</a>
+      <a class="btn" href="https://retirementplanner-seven.vercel.app/qa/golden-scenarios" target="_blank" rel="noopener">查看 Production Golden QA</a>
+      <a class="btn" href="#quickstart">阅读快速上手</a>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<nav aria-label="目录">
+  <h2>目录</h2>
+  <a href="#overview">1. 工具定位</a>
+  <a href="#pages">2. 页面与导航</a>
+  <a href="#accounts">3. 账户管理</a>
+  <a href="#scenario">4. 情景参数</a>
+  <a href="#engine">5. 确定性计算引擎</a>
+  <a href="#tax">6. 税务与 RMD</a>
+  <a href="#roth">7. Roth 转换策略</a>
+  <a href="#cashflow">8. 现金流与取款顺序</a>
+  <a href="#social-security">9. 社会保障金与遗属</a>
+  <a href="#bbd">10. Buy-Borrow-Die / SBLOC</a>
+  <a href="#monte-carlo">11. Monte Carlo 风险分析</a>
+  <a href="#inflation">12. 随机通胀</a>
+  <a href="#longevity">13. 随机寿命</a>
+  <a href="#guardrail">14. Guardrail</a>
+  <a href="#comparison">15. 同 Seed 策略对比</a>
+  <a href="#tranche">16. Roth 分批转换计划</a>
+  <a href="#dashboard">17. Dashboard 输出</a>
+  <a href="#persistence">18. 保存、登录与云同步</a>
+  <a href="#qa">19. Golden QA 与质量保障</a>
+  <a href="#quickstart">20. 推荐使用流程</a>
+  <a href="#interpretation">21. 如何解读结果</a>
+  <a href="#limitations">22. 边界与免责声明</a>
+  <a href="#technical">23. 技术架构</a>
+</nav>
+
+<main>
+<section id="overview" class="content">
+  <h2>1. 工具定位：它解决什么问题</h2>
+  <p class="lead">退休规划真正困难的部分，不是算一个余额，而是同时处理“税、账户类型、领取时点、市场顺序、通胀、寿命和家庭状态变化”。本工具的核心价值，是把这些变量放进同一个年度模拟框架。</p>
+  <div class="grid three">
+    <div class="mini"><div class="kpi">年度决策</div><p>估算每年应转换多少 Roth、从哪里支付生活费与税款、何时可能触发 RMD 或 IRMAA。</p></div>
+    <div class="mini"><div class="kpi">方案比较</div><p>比较“不转换、固定转换、填满税档、平滑收入、自动优化、SBLOC 税款融资”等不同策略。</p></div>
+    <div class="mini"><div class="kpi">风险压力测试</div><p>使用历史股债路径、历史 CPI、Guardrail 与 SSA 寿命表进行 Monte Carlo 模拟。</p></div>
+  </div>
+  <p>适合回答的问题包括：</p>
+  <ul>
+    <li>我应该在退休前或 RMD 前做 Roth conversion 吗？</li>
+    <li>每年转换固定金额，还是填满某个税率档更合理？</li>
+    <li>推迟退休、提高储蓄、改变股债比例，哪个更有效？</li>
+    <li>如果经历高通胀、熊市或寿命超预期，计划还能维持吗？</li>
+    <li>Guardrail 提高成功率的代价，是不是降低了实际消费？</li>
+    <li>配偶去世后，Single 税档、遗属 Social Security 与配偶 RMD 年龄会怎样影响计划？</li>
+  </ul>
+  <div class="warning"><strong>重要：</strong>它是决策支持与情景分析工具，不是报税软件，也不是对未来资产的保证。最适合用于判断“方案方向和相对差异”，而不是把 30 年后的余额当作精确预测。</div>
+</section>
+
+<section id="pages" class="content">
+  <h2>2. 页面与导航</h2>
+  <table>
+    <thead><tr><th>页面</th><th>路由</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard</td><td class="route">/dashboard</td><td>汇总确定性结果、策略选择、图表、优化建议和逐年行动计划。</td></tr>
+      <tr><td>Accounts</td><td class="route">/accounts</td><td>录入并管理 Traditional、Roth、Brokerage 等账户快照。</td></tr>
+      <tr><td>Scenario Builder</td><td class="route">/scenarios</td><td>配置年龄、收入、开支、税率、通胀、Social Security、转换策略等。</td></tr>
+      <tr><td>Monte Carlo</td><td class="route">/monte-carlo</td><td>运行历史区块抽样、Guardrail、寿命敏感度、随机寿命与退休年龄搜索。</td></tr>
+      <tr><td>Same-Seed Compare</td><td class="route">/compare-strategies</td><td>用相同随机路径并排比较最多 3 个策略。</td></tr>
+      <tr><td>Tranche Planner</td><td class="route">/tranche-planner</td><td>将年度 Roth conversion 拆成年初、秋季、年末和市场回撤时点执行。</td></tr>
+      <tr><td>Golden QA</td><td class="route">/qa/golden-scenarios</td><td>在生产环境运行固定、可重复的回归场景，确认计算包没有漂移。</td></tr>
+      <tr><td>Login</td><td class="route">/login</td><td>可选 Supabase 登录和云端持久化。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="accounts" class="content">
+  <h2>3. 账户管理</h2>
+  <p>账户页面用于建立当前资产快照。模型不是只接收一个“总资产”，而是区分不同税务属性，以便正确计算税、RMD、取款顺序和遗产税后价值。</p>
+  <h3>支持的账户类型</h3>
+  <div class="pill-row"><span class="tag">Traditional 401(k)</span><span class="tag">Traditional IRA</span><span class="tag green">Roth 401(k)</span><span class="tag green">Roth IRA</span><span class="tag gold">Taxable Brokerage</span></div>
+  <h3>每个账户可记录</h3>
+  <ul>
+    <li><strong>账户名称</strong>：例如“Fidelity 401(k)”“Vanguard Roth IRA”。</li>
+    <li><strong>所有者</strong>：Primary、Spouse 或 Joint。</li>
+    <li><strong>账户类型与余额</strong>。</li>
+    <li><strong>Brokerage cost basis</strong>：用于区分本金与未实现资本利得。</li>
+    <li><strong>Snapshot date</strong>：标记余额日期。</li>
+  </ul>
+  <p>同类型多个账户会在计算时正确聚合，例如多个 Traditional IRA、401(k) 或 Brokerage 账户。Brokerage 的余额和成本基础分别汇总，避免把全部卖出额误当成应税收益。</p>
+</section>
+
+<section id="scenario" class="content">
+  <h2>4. Scenario Builder：情景参数</h2>
+  <p>Scenario 是整个模型的核心输入。建议建立多个版本，例如“保守收益”“基准”“延迟退休”“低开支”等，而不是只保存一个方案。</p>
+  <div class="grid">
+    <div class="mini"><h3>个人与时间</h3><ul><li>当前年龄、出生年份</li><li>退休年龄、预期寿命</li><li>Single / Married Filing Jointly</li><li>配偶当前年龄、出生年与寿命</li></ul></div>
+    <div class="mini"><h3>收入与储蓄</h3><ul><li>当前工资、年度固定加薪</li><li>利息与非合格股息等其他收入</li><li>税前、Roth、Brokerage 年度供款</li><li>Employer match</li></ul></div>
+    <div class="mini"><h3>退休支出与税</h3><ul><li>年度生活支出</li><li>州税率</li><li>遗留 Traditional 资产的 residual tax rate</li><li>Brokerage gains tax 与 dividend yield</li></ul></div>
+    <div class="mini"><h3>市场与政策假设</h3><ul><li>确定性收益率</li><li>股票配置比例</li><li>固定 / 历史通胀模式</li><li>IRMAA 首两年所需的历史 MAGI</li></ul></div>
+  </div>
+  <h3>向后兼容</h3>
+  <p>旧存档缺少新字段时会使用安全默认值，例如 <code>inflationMode = fixed</code>。配偶出生年若缺失，mapper 可根据当前年龄近似推导；但为了正确区分 SECURE 2.0 的 RMD 起始年龄，建议显式填写出生年。</p>
+</section>
+
+<section id="engine" class="content">
+  <h2>5. 确定性年度计算引擎</h2>
+  <p>引擎以“每一年”为单位推进，从当前年龄模拟到最后幸存者的计划终点。每年大致执行以下顺序：</p>
+  <ol class="step">
+    <li>计算当年工资、其他收入、Social Security 与 RMD。</li>
+    <li>根据选定策略决定 Roth conversion 金额。</li>
+    <li>计算联邦税、州税、IRMAA 和可能的提前取款罚金。</li>
+    <li>按照现金流 waterfall 支付生活费、税与附加费用。</li>
+    <li>更新 Traditional、Roth、Brokerage 和成本基础。</li>
+    <li>应用投资收益、股息税拖累、供款及下一年度假设。</li>
+    <li>记录短缺、资产余额、边际税率及各资金来源。</li>
+  </ol>
+  <h3>年度输出字段</h3>
+  <p>每年结果包括 Traditional / Roth / Brokerage 余额、Brokerage basis、RMD、conversion、taxable income、联邦税、州税、IRMAA、shortfall、边际税率、计划消费、实际消费和各类资金来源。</p>
+  <div class="note">所有核心计算位于纯 TypeScript 函数中，独立于 Angular UI，因此可以单元测试、Worker 调用、Golden QA 回归，也便于审查计算顺序。</div>
+</section>
+
+<section id="tax" class="content">
+  <h2>6. 税务、IRMAA 与 RMD</h2>
+  <h3>联邦税</h3>
+  <ul><li>按累进税档计算，不是对全部收入使用同一边际税率。</li><li>支持标准扣除和税档随政策假设指数化。</li><li>Conversion 只计入其引起的增量税负。</li><li>州税目前按用户输入的平坦税率估算。</li></ul>
+  <h3>IRMAA</h3>
+  <p>模型依据 MAGI 与两年滞后逻辑估算 Medicare Part B / D 附加保费。对于模拟开始时缺少历史年份的情况，可使用 <code>preSimulationMagi</code> 作为初始数据。</p>
+  <h3>RMD</h3>
+  <ul>
+    <li>使用 IRS Uniform Lifetime Table divisor。</li>
+    <li>SECURE 2.0 起始年龄根据出生年决定为 73 或 75。</li>
+    <li>Primary 去世当年仍按逝者规则处理；下一年开始，若配偶存活并完成 spousal rollover，则按配偶年龄与出生年计算 RMD。</li>
+    <li>这项遗属切换逻辑避免继续错误地沿用 Primary 年龄。</li>
+  </ul>
+</section>
+
+<section id="roth" class="content">
+  <h2>7. Roth Conversion 策略</h2>
+  <table>
+    <thead><tr><th>模式</th><th>行为</th><th>适合用途</th></tr></thead>
+    <tbody>
+      <tr><td>None</td><td>不进行 Roth conversion。</td><td>作为基线。</td></tr>
+      <tr><td>Fixed Amount</td><td>每年转换固定金额，可设置在 RMD 年龄或指定年龄停止。</td><td>执行简单、可预算。</td></tr>
+      <tr><td>Fill to Bracket</td><td>利用当年剩余税档空间，转换到目标税率档上沿。</td><td>控制边际税率。</td></tr>
+      <tr><td>Smooth to Bracket</td><td>在多个年份之间平滑转换，以避免未来收入或 RMD 尖峰。</td><td>长期税率平滑。</td></tr>
+      <tr><td>Fill to Income</td><td>将收入填至指定目标，可设置保留资产底线和停止年龄。</td><td>控制 MAGI 或目标收入。</td></tr>
+      <tr><td>Smooth Income Target</td><td>搜索更平滑的年度应税收入目标。</td><td>降低税率、RMD 与 IRMAA 波动。</td></tr>
+      <tr><td>Auto Optimize</td><td>遍历候选税档/策略并按税后评分选择。</td><td>寻找候选最优方案。</td></tr>
+    </tbody>
+  </table>
+  <h3>工作期转换</h3>
+  <p>可以允许退休前转换。模型先放入工资，再利用剩余税档空间做转换，并只计算 conversion 带来的增量税。这样可以评估“高工资时期是否仍值得转换”。</p>
+  <h3>税后评分</h3>
+  <p>策略选择不是简单比较税前总资产，而是考虑 Traditional 余额未来税负、Brokerage 未实现收益税率、Roth 的免税属性以及可能的 SBLOC 债务，从而得到更有意义的税后结果。</p>
+</section>
+
+<section id="cashflow" class="content">
+  <h2>8. 现金流、供款和取款顺序</h2>
+  <h3>退休前积累</h3>
+  <p>模型支持税前供款、Roth 供款、Brokerage 储蓄和 employer match。税后现金约束会限制不可能实现的 Roth / Brokerage 供款，避免“工资不够却仍按计划全部存入”的错误。</p>
+  <h3>退休后支出 waterfall</h3>
+  <p>生活费可由 Social Security、RMD、Traditional、Brokerage 和 Roth 依次提供。税款也有独立的资金来源记录，包括 Brokerage、conversion withholding、Traditional gross-up、Roth 或 SBLOC。</p>
+  <h3>Spending Order</h3>
+  <ul><li><strong>Traditional-first：</strong>先利用低税档从 IRA 取款。</li><li><strong>Brokerage-first：</strong>先花 Brokerage，把税档空间留给 Roth conversion。</li><li><strong>自动选择：</strong>若未指定，模型比较两种路径，保留税后评分更高者。</li></ul>
+  <h3>Brokerage 细节</h3>
+  <ul><li>按成本基础比例计算卖出中的本金和收益。</li><li>股息收益率作为总收益的一部分，而不是额外叠加。</li><li>股息每年产生税拖累，若再投资则提高 cost basis。</li><li>终点 Brokerage gains tax 可设为 0 模拟继承 step-up，或设置为预计清算税率。</li></ul>
+</section>
+
+<section id="social-security" class="content">
+  <h2>9. Social Security 与遗属阶段</h2>
+  <ul>
+    <li>Claim age 支持 62–70 岁。</li>
+    <li>用户输入的是在选定 claim age 下的月度 benefit；引擎不会再次重复应用领取年龄系数。</li>
+    <li>Fixed inflation 模式使用用户配置的 <code>ssColaRate</code>。</li>
+    <li>Historical inflation 模式使用上一年度 sampled CPI 作为下一年度 COLA，并忽略固定 <code>ssColaRate</code>。</li>
+    <li>配偶可配置独立 claim age 和 benefit。</li>
+  </ul>
+  <h3>第一位配偶去世后</h3>
+  <p>下一年起模型切换到 Single filing，采用 Single 税档、扣除额、IRMAA 和一个 Medicare enrollee；Social Security 遗属收入保留夫妻两人中较高的一项潜在 benefit。账户余额转给幸存者。</p>
+  <div class="warning">这会显式模拟常见的“widow’s tax penalty”：家庭收入可能下降，但 Single 税档和 IRMAA 门槛也更低。</div>
+</section>
+
+<section id="bbd" class="content">
+  <h2>10. Buy-Borrow-Die 与 SBLOC 税款融资</h2>
+  <p>在配置的年龄窗口内，Roth conversion 的增量税可不卖出 Brokerage，而是通过以证券为抵押的信用额度（SBLOC）借款支付。</p>
+  <ul>
+    <li>可设置开始年龄、结束年龄、借款利率和最大 LTV。</li>
+    <li>贷款利息随余额复利增长。</li>
+    <li>当贷款超过 collateral 支持能力时，模型执行 margin-call cure，优先使用 Brokerage，必要时使用 Roth 偿还。</li>
+    <li>资产图可显示 gross assets；税后遗产分析应减去 SBLOC loan balance。</li>
+    <li>策略选择器会比较现金缴税与 SBLOC 缴税的结果，不会假定借款一定更好。</li>
+  </ul>
+  <div class="warning">SBLOC 具有利率、抵押品下跌、强制偿还和产品条款风险。本模型只用于压力测试概念，不代表任何贷款建议。</div>
+</section>
+
+<section id="monte-carlo" class="content">
+  <h2>11. Monte Carlo 风险分析</h2>
+  <p>Monte Carlo 页不是简单从正态分布生成独立收益，而是重放历史股债数据并通过 stationary block bootstrap 保留一部分连续年份关系。</p>
+  <h3>核心设置与输出</h3>
+  <div class="grid">
+    <div class="mini"><h3>输入</h3><ul><li>Trial 数量与 Seed</li><li>股票配置比例</li><li>固定或历史通胀</li><li>Guardrail 开关</li><li>固定寿命或 SSA 随机寿命</li></ul></div>
+    <div class="mini"><h3>输出</h3><ul><li>计划成功概率</li><li>期末资产 P10 / P50 / P90</li><li>按年龄的资产 percentile fan chart</li><li>短缺和消费实现率</li><li>Guardrail 触发统计</li></ul></div>
+  </div>
+  <h3>股债联合抽样</h3>
+  <p>股票和 10 年期美国国债从同一历史年份抽取，并按用户配置的股票比例组合；模型每年再平衡。这样 60/40 组合不会把互不对应年份的股债收益随意拼接。</p>
+  <h3>Web Worker</h3>
+  <p>长时间模拟在 Web Worker 中运行，避免冻结浏览器 UI。Worker 会分批发送进度消息，而不是每个 trial 都发送。无 Worker 环境仍保留直接引擎 fallback，并用同一回调格式报告进度。</p>
+</section>
+
+<section id="inflation" class="content">
+  <h2>12. Fixed / Historical 双模式通胀</h2>
+  <table>
+    <thead><tr><th>模式</th><th>生活支出</th><th>Social Security COLA</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>Fixed（默认）</td><td>使用原有固定 3% 假设</td><td>使用用户输入的 ssColaRate</td><td>保持旧模型与 Golden 结果完全一致</td></tr>
+      <tr><td>Historical</td><td>使用与股债同一历史年份的 CPI</td><td>使用上一年度 sampled CPI</td><td>模拟高通胀、低通胀和滞胀路径</td></tr>
+    </tbody>
+  </table>
+  <h3>联合年份一致性</h3>
+  <p>Historical 模式下，某个 trial 年份的 stock return、Treasury return 和 CPI 来自同一个历史年份、同一个抽样区块。例如抽中 1974 年时，三者都取 1974 年的数据。</p>
+  <h3>明确的模型边界</h3>
+  <ul>
+    <li>税档和 IRMAA 门槛仍使用独立政策指数化，不直接等于 sampled CPI。</li>
+    <li>策略搜索仍先在确定性计划上求解；随机通胀只用于 Monte Carlo trial 回放。</li>
+    <li>Guardrail 仍与固定通胀确定性基线比较，因此高通胀路径更容易触发削减，这是预期行为。</li>
+  </ul>
+</section>
+
+<section id="longevity" class="content">
+  <h2>13. SSA 随机寿命</h2>
+  <p>除了固定 life expectancy，工具还可以使用内嵌的 SSA 2023 Period Life Table 为每个 trial 抽样死亡年龄。</p>
+  <ul>
+    <li>Primary 与 spouse 的寿命使用独立随机流。</li>
+    <li>Single 场景每个 trial 抽一个死亡年龄。</li>
+    <li>Married 场景分别抽样两人，第一人去世后切换遗属规则，模拟到最后幸存者。</li>
+    <li>市场、Primary mortality、Spouse mortality 使用分离的确定性 seed namespace，确保复现性。</li>
+  </ul>
+  <h3>报告指标</h3>
+  <ul><li>Mortality-weighted success probability</li><li>Primary / spouse median death age</li><li>最后幸存者年龄 P10–P90</li><li>活到 90、95、100 岁的概率</li><li>Worker 与 direct engine parity</li></ul>
+  <div class="warning"><strong>限制：</strong>SSA Period 表反映人口平均死亡率，不包含健康状况、吸烟、家族史、收入、医疗条件或个体风险。配偶死亡目前假设相互独立。</div>
+</section>
+
+<section id="guardrail" class="content">
+  <h2>14. Adaptive Spending Guardrail</h2>
+  <p>Guardrail 允许在不利市场路径中动态调整消费，以降低资金枯竭风险。它不是“免费提高成功率”，因为成功率上升可能来自减少支出。</p>
+  <h3>正确的解读方式</h3>
+  <ul><li>同时看成功率与 <strong>mean consumption realization</strong>。</li><li>比较触发频率、削减幅度和恢复情况。</li><li>不要只选择成功率最高的方案。</li></ul>
+  <p>同 Seed 策略对比页专门把 Consumption 与 Success 并排展示，避免把“少花很多钱”误解成纯粹的策略改进。</p>
+</section>
+
+<section id="comparison" class="content">
+  <h2>15. 同 Seed 策略对比（Same-Seed Strategy Comparison）</h2>
+  <p class="lead">它的目的，是让多个方案经历完全相同的随机世界，从而把差异尽可能归因于策略本身，而不是随机运气。</p>
+  <h3>为什么必须同 Seed</h3>
+  <p>如果方案 A 恰好抽到牛市，而方案 B 抽到熊市，即使 A 成功率更高，也不能说明 A 的策略更好。同 Seed 会让两者的第 1、2、3……个 trial 使用对齐的股票、债券、CPI 和随机流。</p>
+  <h3>当前支持比较的变量</h3>
+  <ul><li>退休年龄</li><li>股票配置比例</li><li>使用已保存的 Roth conversion 策略，或完全不转换</li><li>是否启用 Guardrail</li><li>Seed 和 trial 数量</li></ul>
+  <h3>结果表</h3>
+  <ul><li>成功概率及相对基准变化（百分点）</li><li>Median ending assets 及相对基准变化</li><li>10th percentile ending assets</li><li>消费实现率</li><li>自动标识成功率最高的行</li></ul>
+  <div class="success">页面只复制 Scenario 后再改变指定变量，不会修改用户保存的原始 Scenario 或 Accounts。</div>
+</section>
+
+<section id="tranche" class="content">
+  <h2>16. Roth Conversion Tranche Planner</h2>
+  <p>Tranche Planner 将一个年度 conversion 计划拆成多个执行检查点，帮助把“模型建议”转成更现实的操作节奏。</p>
+  <ul><li><strong>January：</strong>根据年初工资、税档和预期收入设置初始计划。</li><li><strong>October / Fall True-Up：</strong>结合年内实际收入、奖金和市场变化修正。</li><li><strong>December：</strong>在税年结束前完成最后校准。</li><li><strong>Market Drawdown Check：</strong>市场明显回撤时，评估是否以较低资产价格提前转换。</li></ul>
+  <p>它同时显示 bracket gauge、Traditional / Roth / Brokerage 只读余额、年度 conversion 目标和优化提示。</p>
+</section>
+
+<section id="dashboard" class="content">
+  <h2>17. Dashboard 与结果解释</h2>
+  <h3>策略结果</h3>
+  <ul><li>Baseline 与候选转换策略对比</li><li>最终实际采用的 resolved strategy</li><li>自动选择的 spending order 与是否进行工作期转换</li><li>Strategy Selector：Roth Conversion vs Buy-Borrow-Die</li></ul>
+  <h3>图表与行动计划</h3>
+  <ul><li>Asset Curve：各类账户余额随年龄变化</li><li>RMD Curve</li><li>Return-Rate Sensitivity</li><li>Longevity Sensitivity</li><li>Estimated Earliest Feasible Retirement Age</li><li>Year-by-Year Action Plan：逐年 conversion、RMD、税、IRMAA 和支出来源</li><li>Optimization Advice & Insights：将引擎选择翻译为可读建议</li></ul>
+  <p>Dashboard 的重点不是只给一个总资产数字，而是解释“为什么选这个方案”和“每年需要做什么”。</p>
+</section>
+
+<section id="persistence" class="content">
+  <h2>18. 本地状态、登录与 Supabase 云同步</h2>
+  <ul>
+    <li><strong>无需登录：</strong>工具可使用 local state 和预置数据运行主要计算功能。</li>
+    <li><strong>登录后：</strong>可将 Scenario 和 Accounts 保存到 Supabase。</li>
+    <li><strong>Row Level Security：</strong>数据库迁移包含用户隔离策略。</li>
+    <li><strong>旧数据兼容：</strong>新增字段通过默认值和 mapper 兼容旧存档。</li>
+  </ul>
+  <h3>当前数据库迁移</h3>
+  <p><code>0001_init.sql</code> 至 <code>0006_add_survivor_and_inflation_fields.sql</code>，覆盖基础表、Scenario 字段、股票配置、账户身份、配偶数据和通胀模式。</p>
+</section>
+
+<section id="qa" class="content">
+  <h2>19. Production Golden Scenarios 与质量保障</h2>
+  <p>Golden QA 页面直接针对生产计算 bundle 运行固定、可重复的场景。它不会修改用户保存的数据。</p>
+  <p><a href="https://retirementplanner-seven.vercel.app/qa/golden-scenarios" target="_blank" rel="noopener"><strong>打开 Golden Scenarios 页面</strong></a></p>
+  <h3>覆盖的关键路径</h3>
+  <ol>
+    <li>工作期积累和税后现金供款约束。</li>
+    <li>多个同类型账户及 Brokerage cost basis 聚合。</li>
+    <li>股票/债券联合历史抽样与 60/40 波动降低。</li>
+    <li>Return × Guardrail 六格敏感度。</li>
+    <li>最早可行退休年龄搜索。</li>
+    <li>Web Worker serialization parity。</li>
+    <li>SSA stochastic longevity 与 Worker parity。</li>
+    <li>遗属阶段 RMD 所有者和年龄切换。</li>
+    <li>Historical inflation 语义与联合年份。</li>
+    <li>Same-seed strategy comparison 的确定性重放与只读性。</li>
+  </ol>
+  <h3>开发与 CI 检查</h3>
+  <pre><code>npm ci
+npm run check:conflicts
+npm run test:ci
+npm run test:golden
+npm run build</code></pre>
+  <p>固定模式下的 Golden 值受到保护。若税法、历史数据或现金流顺序发生有意修改，应解释变化原因，而不是无审查地刷新期望值。</p>
+</section>
+
+<section id="quickstart" class="content">
+  <h2>20. 推荐使用流程</h2>
+  <ol class="step">
+    <li><strong>录入账户。</strong>分别输入 Traditional、Roth 和 Brokerage，并填写 Brokerage cost basis。</li>
+    <li><strong>建立基准 Scenario。</strong>填写当前年龄、出生年、退休年龄、工资、供款、开支、Social Security 和税率。</li>
+    <li><strong>先跑确定性 Dashboard。</strong>确认现金流、RMD、conversion 和税务结果符合直觉。</li>
+    <li><strong>建立保守/基准/乐观假设。</strong>改变收益率、退休年龄和支出，而不是只相信一个版本。</li>
+    <li><strong>运行 Monte Carlo。</strong>先用 Fixed inflation 验证旧基线，再切 Historical inflation 查看滞胀风险。</li>
+    <li><strong>打开 SSA Stochastic Longevity。</strong>观察死亡年龄分布对成功率的影响。</li>
+    <li><strong>启用 Guardrail 后检查 Consumption。</strong>确认成功率提高是否伴随可接受的消费削减。</li>
+    <li><strong>使用 Same-Seed Compare。</strong>比较推迟退休、改变配置、关闭 conversion 或开启 Guardrail。</li>
+    <li><strong>查看 Year-by-Year Action Plan 和 Tranche Planner。</strong>将长期模型转换为本年度可执行动作。</li>
+    <li><strong>每年重跑。</strong>更新余额、税表、工资、开支和 Social Security 估计，而不是一次计算后多年不变。</li>
+  </ol>
+</section>
+
+<section id="interpretation" class="content">
+  <h2>21. 如何正确解读结果</h2>
+  <h3>可信度分层</h3>
+  <table>
+    <thead><tr><th>结果类型</th><th>适合的解释</th><th>不适合的解释</th></tr></thead>
+    <tbody>
+      <tr><td>单年度税务机制</td><td>用于检查税档空间、RMD、conversion sizing 和 IRMAA cliffs。</td><td>不能代替正式报税或专业税务意见。</td></tr>
+      <tr><td>策略相对排名</td><td>当差距很大且在多组假设下稳定时，通常具有决策价值。</td><td>差距很小时不要把排名当作确定事实。</td></tr>
+      <tr><td>长期期末资产</td><td>作为不同情景下的范围与风险指标。</td><td>不能把几十年后的某个具体金额当成预测。</td></tr>
+    </tbody>
+  </table>
+  <h3>建议重点关注</h3>
+  <ul><li>策略在 5%、6.5%、8% 等不同收益假设下是否方向一致。</li><li>同 Seed 下方案差异是否稳定。</li><li>P10 结果是否仍可接受，而不只是 P50。</li><li>成功率提升是否依赖显著削减消费。</li><li>税后资产、累计税、RMD 和 IRMAA 是否同步改善。</li></ul>
+</section>
+
+<section id="limitations" class="content">
+  <h2>22. 已知边界与免责声明</h2>
+  <ul>
+    <li>不是财务、投资、法律、贷款或税务建议。</li>
+    <li>税法、IRMAA、Social Security 和遗产规则可能变化。</li>
+    <li>州税目前采用平坦税率近似。</li>
+    <li>Social Security 应税比例等部分规则存在简化。</li>
+    <li>未必涵盖 NIIT、所有 deduction、credit、地方税和特殊账户规则。</li>
+    <li>SSA Period Life Table 不是个体化医学寿命预测。</li>
+    <li>历史数据不能保证未来重复，block bootstrap 也不能涵盖所有宏观状态。</li>
+    <li>SBLOC 的真实利率、margin 条款和券商规则可能与模型不同。</li>
+    <li>模型的精度受输入质量影响；错误的余额、cost basis、收入或 benefit 会直接影响结论。</li>
+  </ul>
+  <div class="warning"><strong>使用原则：</strong>把工具用于发现风险、比较方向、准备问题和制定年度检查清单；在执行大额 conversion、借款、退休或 Social Security 决策前，咨询合格专业人士。</div>
+</section>
+
+<section id="technical" class="content">
+  <h2>23. 技术架构与部署</h2>
+  <div class="grid">
+    <div class="mini"><h3>前端</h3><p>Angular 20 standalone components、Signals、Angular Material、ngx-charts。</p></div>
+    <div class="mini"><h3>计算</h3><p>纯 TypeScript、不可变年度结果、框架无关函数、Web Worker。</p></div>
+    <div class="mini"><h3>存储</h3><p>可选 Supabase PostgreSQL + Auth + RLS；未登录时本地状态仍可计算。</p></div>
+    <div class="mini"><h3>部署</h3><p>Vercel SPA；生产环境变量通过构建脚本生成 Angular environment。</p></div>
+  </div>
+  <h3>本地运行</h3>
+  <pre><code>npm install
+npm start
+# 浏览器打开 http://localhost:4200</code></pre>
+  <h3>生产构建</h3>
+  <pre><code>npm run build</code></pre>
+  <p>在线地址：<a href="https://retirementplanner-seven.vercel.app/dashboard" target="_blank" rel="noopener">https://retirementplanner-seven.vercel.app/dashboard</a></p>
+</section>
+
+<section class="content">
+  <h2>分享建议</h2>
+  <p>本文件是单文件 HTML，可直接通过邮件、网盘、内部网站或静态托管分享。所有样式已内嵌，不依赖外部 CSS 或 JavaScript；打印时会自动隐藏侧边目录和按钮，适合另存为 PDF。</p>
+  <details><summary>推荐给阅读者的最短说明</summary><p>先看“工具定位”和“推荐使用流程”，再打开在线 Dashboard。若想确认生产计算包正常，请打开 Golden QA；若想比较方案，请使用 Same-Seed Strategy Comparison。</p></details>
+</section>
+</main>
+</div>
+<footer class="footer">Retirement Strategy Planner · 中文完整功能说明 · 本文档用于产品介绍与建模说明，不构成专业建议。</footer>
+</body>
+</html>

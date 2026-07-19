@@ -40,7 +40,7 @@ import { AuthService } from './core/services/auth.service';
           <mat-icon>verified</mat-icon>
           Golden QA
         </a>
-        <a mat-button href="/runningsteps_eng.html" target="_blank">
+        <a mat-button routerLink="/help" routerLinkActive="active-link">
           <mat-icon>help</mat-icon>
           Help
         </a>

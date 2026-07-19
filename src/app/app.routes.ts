@@ -8,6 +8,7 @@ export const routes: Routes = [
   { path: 'tranche-planner', loadComponent: () => import('./features/tranche-planner/tranche-planner').then((m) => m.TranchePlanner) },
   { path: 'compare-strategies', loadComponent: () => import('./features/strategy-comparison/strategy-comparison').then((m) => m.StrategyComparison) },
   { path: 'qa/golden-scenarios', loadComponent: () => import('./features/qa-golden-scenarios/qa-golden-scenarios').then((m) => m.QaGoldenScenarios) },
+  { path: 'help', loadComponent: () => import('./features/help/help').then((m) => m.Help) },
   { path: 'login', loadComponent: () => import('./features/auth/login').then((m) => m.Login) },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: '**', redirectTo: 'dashboard' },
