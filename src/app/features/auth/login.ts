@@ -69,6 +69,8 @@ export class Login {
   }
 
   async signOut(): Promise<void> {
+    // Local plan data is cleared on sign-out (AuthService.applySession) — confirm first
+    if (!confirm('Sign out? Plan data held only in this browser will be cleared. Anything saved to Supabase stays safe.')) return;
     try {
       await this.auth.signOut();
       this.message.set('Signed out.');

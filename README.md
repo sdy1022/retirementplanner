@@ -62,7 +62,7 @@ The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tes
 
 3. **(Optional) Configure Supabase persistence**
    - Create a project at [Supabase](https://supabase.com).
-   - Run `supabase/migrations/0001_init.sql` in the Supabase SQL Editor to provision tables and Row Level Security policies.
+   - Run all files in `supabase/migrations/` in order (`0001` through `0007`; `0007` is idempotent and re-asserts every column, constraint, and RLS policy the app expects, so running it alone repairs a database that only ever ran `0001`) in the Supabase SQL Editor to provision tables and Row Level Security policies.
    - For local dev, fill `supabaseUrl` / `supabaseAnonKey` in `src/environments/environment.ts`.
    - For production, set the `SUPABASE_URL` / `SUPABASE_ANON_KEY` environment variables (e.g. in Vercel) â€” the build runs `set-env.js`, which generates `environment.production.ts` automatically. **Never hand-edit `environment.production.ts`**; it is overwritten on every build.
 
@@ -155,7 +155,7 @@ This is a modeling tool, not financial or tax advice. Tax tables cover a single 
 
 3. **ï¼ˆå¯é€‰ï¼‰é…ç½® Supabase æŒä¹…åŒ–**
    - åœ¨ [Supabase](https://supabase.com) ä¸­åˆ›å»ºé¡¹ç›®ã€‚
-   - åœ¨ Supabase SQL ç¼–è¾‘å™¨ä¸­è¿è¡Œ `supabase/migrations/0001_init.sql`ï¼Œåˆå§‹åŒ–æ•°æ®åº“è¡¨å’Œè¡Œçº§å®‰å…¨ (RLS) ç­–ç•¥ã€‚
+   - åœ¨ Supabase SQL ç¼–è¾‘å™¨ä¸­è¿è¡Œ all files in `supabase/migrations/` in order (`0001` through `0007`; `0007` is idempotent and re-asserts every column, constraint, and RLS policy the app expects, so running it alone repairs a database that only ever ran `0001`)ï¼Œåˆå§‹åŒ–æ•°æ®åº“è¡¨å’Œè¡Œçº§å®‰å…¨ (RLS) ç­–ç•¥ã€‚
    - æœ¬åœ°å¼€å‘ï¼šåœ¨ `src/environments/environment.ts` ä¸­å¡«å…¥ `supabaseUrl` / `supabaseAnonKey`ã€‚
    - ç”Ÿäº§çŽ¯å¢ƒï¼šè®¾ç½® `SUPABASE_URL` / `SUPABASE_ANON_KEY` çŽ¯å¢ƒå˜é‡ï¼ˆå¦‚åœ¨ Vercel ä¸­ï¼‰â€”â€” æž„å»ºæ—¶ `set-env.js` ä¼šè‡ªåŠ¨ç”Ÿæˆ `environment.production.ts`ã€‚**åˆ‡å‹¿æ‰‹åŠ¨ç¼–è¾‘ `environment.production.ts`**ï¼Œæ¯æ¬¡æž„å»ºéƒ½ä¼šå°†å…¶è¦†ç›–ã€‚
 

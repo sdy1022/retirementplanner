@@ -108,6 +108,8 @@ export class Accounts {
   editAccount(index:number):void { const a=this.state.accounts()[index]; this.editingIndex.set(index); this.form.setValue({name:a.name||this.typeLabel(a.type),owner:a.owner||'primary',type:a.type,balance:a.balance,costBasis:a.costBasis??0,snapshotDate:a.snapshotDate}); }
   deleteAccount(index:number):void { if (confirm('Delete this account?')) { this.state.deleteAccount(index); if(this.editingIndex()===index)this.cancelEdit(); } }
   cancelEdit():void { this.editingIndex.set(null); this.form.reset({name:'',owner:'primary',type:'traditional_401k',balance:0,costBasis:0,snapshotDate:new Date().toISOString().slice(0,10)}); }
-  async saveToCloud():Promise<void>{const user=this.auth.currentUser();if(!user)return;try{await this.accountService.createMany(this.state.accounts(),user.id);alert('Accounts saved to cloud successfully.');}catch(e){alert('Error saving accounts: '+(e instanceof Error?e.message:String(e)));}}
+  // syncAll (not createMany) so repeated saves update the same rows instead of appending a
+  // duplicate copy of every account; the returned ids go back into local state to keep it so.
+  async saveToCloud():Promise<void>{const user=this.auth.currentUser();if(!user)return;try{const saved=await this.accountService.syncAll(this.state.accounts(),user.id);this.state.setAccounts(saved);alert('Accounts saved to cloud successfully.');}catch(e){alert('Error saving accounts: '+(e instanceof Error?e.message:String(e)));}}
   async loadFromCloud():Promise<void>{try{const list=await this.accountService.list();if(list.length){this.state.setAccounts(list);alert('Accounts loaded from cloud successfully.');}else alert('No accounts found in cloud.');}catch(e){alert('Error loading accounts: '+(e instanceof Error?e.message:String(e)));}}
 }

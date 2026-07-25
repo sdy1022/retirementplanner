@@ -181,6 +181,10 @@ export class ScenarioBuilder {
                 ? { mode: 'auto-optimize' }
                 : { mode: 'none' };
     const scenario: Scenario = {
+      // Carried through the form rebuild so a cloud-loaded scenario keeps its row identity —
+      // without this, editing it would turn the next "Save to Supabase" into a new row.
+      id: this.state.scenario().id,
+      userId: this.state.scenario().userId,
       name: value.name,
       currentAge: value.currentAge,
       retirementAge: value.retirementAge,
@@ -223,7 +227,11 @@ export class ScenarioBuilder {
     const user = this.auth.currentUser();
     if (!user) return;
     try {
-      await this.scenarioService.create(this.state.scenario(), user.id);
+      // save() updates the existing row when the scenario came from the cloud; storing the id
+      // back keeps every later save an update instead of another appended copy.
+      const scenario = this.state.scenario();
+      const id = await this.scenarioService.save(scenario, user.id);
+      if (id !== scenario.id) this.state.updateScenario({ ...scenario, id, userId: user.id });
       alert('Scenario saved to cloud successfully.');
     } catch (e) {
       alert('Error saving scenario: ' + (e instanceof Error ? e.message : String(e)));

@@ -140,6 +140,8 @@ export class App {
   }
 
   async signOut() {
+    // Signing out clears the browser-local plan (see AuthService.applySession), so warn first
+    if (!confirm('Sign out? Plan data held only in this browser will be cleared. Anything saved to Supabase stays safe.')) return;
     try {
       await this.auth.signOut();
     } catch (err) {

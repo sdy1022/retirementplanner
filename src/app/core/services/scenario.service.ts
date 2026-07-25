@@ -27,6 +27,10 @@ export class ScenarioService {
       stateTaxRate: Number(row.state_tax_rate ?? 0),
       wageIncome: Number(row.wage_income ?? 0),
       annualLivingExpenses: Number(row.annual_living_expenses ?? 0),
+      ssColaRate: row.ss_cola_rate == null ? undefined : Number(row.ss_cola_rate),
+      preSimulationMagi: row.pre_simulation_magi == null ? undefined : Number(row.pre_simulation_magi),
+      spendingOrder: row.spending_order ?? undefined,
+      sblocTaxFunding: row.sbloc_tax_funding ?? undefined,
       spouseCurrentAge: row.spouse_current_age == null ? undefined : Number(row.spouse_current_age),
       spouseBirthYear: row.spouse_birth_year == null ? undefined : Number(row.spouse_birth_year),
       spouseLifeExpectancy: row.spouse_life_expectancy == null ? undefined : Number(row.spouse_life_expectancy),
@@ -45,8 +49,43 @@ export class ScenarioService {
     }));
   }
 
-  async create(scenario: Scenario, userId: string): Promise<void> {
-    const { error } = await this.requireClient().from('scenarios').insert({
+  /**
+   * Writes the scenario to the cloud and returns its row id.
+   *
+   * Updates in place when the scenario already carries an id (i.e. it came from `list()`),
+   * inserts otherwise. `create()` used to be called unconditionally, so every click of
+   * "Save to Supabase" appended another row and the table grew without bound; callers should
+   * store the returned id in local state so subsequent saves stay idempotent.
+   */
+  async save(scenario: Scenario, userId: string): Promise<string> {
+    if (scenario.id) {
+      const { data, error } = await this.requireClient()
+        .from('scenarios')
+        .update(this.toRow(scenario, userId))
+        // RLS already scopes writes to the owner; the explicit filter keeps the intent local
+        .eq('id', scenario.id)
+        .eq('user_id', userId)
+        .select('id');
+      if (error) throw error;
+      // An empty result means the row is gone (deleted elsewhere) — fall through to insert
+      // rather than silently discarding the user's save.
+      if (data?.length) return scenario.id;
+    }
+    return this.create(scenario, userId);
+  }
+
+  async create(scenario: Scenario, userId: string): Promise<string> {
+    const { data, error } = await this.requireClient()
+      .from('scenarios')
+      .insert(this.toRow(scenario, userId))
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data?.id as string;
+  }
+
+  private toRow(scenario: Scenario, userId: string) {
+    return {
       user_id: userId,
       name: scenario.name,
       current_age: scenario.currentAge,
@@ -78,8 +117,11 @@ export class ScenarioService {
       allow_pre_retirement_conversions: scenario.allowPreRetirementConversions,
       brokerage_gains_tax_rate: scenario.brokerageGainsTaxRate,
       dividend_yield: scenario.dividendYield,
-    });
-    if (error) throw error;
+      ss_cola_rate: scenario.ssColaRate,
+      pre_simulation_magi: scenario.preSimulationMagi,
+      spending_order: scenario.spendingOrder,
+      sbloc_tax_funding: scenario.sblocTaxFunding,
+    };
   }
 
   private requireClient() {
