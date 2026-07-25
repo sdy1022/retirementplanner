@@ -321,13 +321,16 @@
 <section id="persistence" class="content">
   <h2>18. 本地状态、登录与 Supabase 云同步</h2>
   <ul>
-    <li><strong>无需登录：</strong>工具可使用 local state 和预置数据运行主要计算功能。</li>
-    <li><strong>登录后：</strong>可将 Scenario 和 Accounts 保存到 Supabase。</li>
-    <li><strong>Row Level Security：</strong>数据库迁移包含用户隔离策略。</li>
+    <li><strong>无需登录：</strong>工具可使用 local state 和预置数据运行主要计算功能。全部计算都在你自己的浏览器中完成，不上传服务器。</li>
+    <li><strong>登录后：</strong>可将 Scenario 和 Accounts 保存到 Supabase，从而在其它设备或浏览器上取回。</li>
+    <li><strong>保存为「更新」而非「追加」：</strong>再次点击 Save to Supabase 会更新已有记录，并删除你在本地删掉的账户；不会像早期版本那样每次保存都复制一份，导致 Load 回来数量翻倍。</li>
+    <li><strong>退出登录会清空本地计划数据：</strong>账户余额和 Scenario 存放在浏览器 <code>localStorage</code> 中，而 <code>localStorage</code> 是<em>整个浏览器共用</em>的，不区分登录账号。因此退出登录（或换一个账号登录）时会自动清空，避免下一个使用这台电脑的人看到你的财务数据，也避免把你的数字保存进别人的云端记录。点击 Sign Out 时会先弹出确认框；<strong>已保存到 Supabase 的数据不受影响</strong>。匿名录入后再登录则会保留数据，方便把刚输入的内容存到云端。</li>
+    <li><strong>Row Level Security：</strong>数据库迁移包含用户隔离策略，每个用户只能读写 <code>user_id</code> 等于自己的行。若曾在 Supabase 后台用模板添加过 "Enable read access for all users" 这类策略，应当删除——RLS 策略是「或」关系，这类策略会绕过用户隔离。</li>
     <li><strong>旧数据兼容：</strong>新增字段通过默认值和 mapper 兼容旧存档。</li>
   </ul>
   <h3>当前数据库迁移</h3>
-  <p><code>0001_init.sql</code> 至 <code>0006_add_survivor_and_inflation_fields.sql</code>，覆盖基础表、Scenario 字段、股票配置、账户身份、配偶数据和通胀模式。</p>
+  <p><code>0001_init.sql</code> 至 <code>0007_sync_scenario_columns.sql</code>，覆盖基础表、Scenario 字段、股票配置、账户身份、配偶数据和通胀模式。</p>
+  <p><strong>请按顺序运行 <code>supabase/migrations/</code> 下的全部文件。</strong><code>0007</code> 是幂等的：它重新声明了前几个迁移新增的所有列、约束和 RLS 策略，并补上供款、SS COLA、pre-simulation MAGI、spending order 等此前客户端会写入但数据库中并不存在的列（缺少这些列时，云端保存会报 <code>PGRST204</code> 错误）。因此即使早期只运行过 <code>0001_init.sql</code>，单独运行 <code>0007</code> 也足以把数据库修复到 v1.0 需要的状态，且可重复运行。</p>
 </section>
 
 <section id="qa" class="content">
