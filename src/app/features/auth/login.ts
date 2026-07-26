@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,8 +27,20 @@ import { AuthService } from '../../core/services/auth.service';
           </div>
         } @else {
           <form [formGroup]="form" class="form-grid">
-            <mat-form-field><mat-label>Email</mat-label><input matInput type="email" formControlName="email" /></mat-form-field>
-            <mat-form-field><mat-label>Password</mat-label><input matInput type="password" formControlName="password" /></mat-form-field>
+            <mat-form-field>
+              <mat-label>Email</mat-label>
+              <input matInput type="email" formControlName="email" #emailInput autocomplete="email" />
+              @if (form.controls.email.touched && form.controls.email.invalid) {
+                <mat-error>Enter a valid email address.</mat-error>
+              }
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Password</mat-label>
+              <input matInput type="password" formControlName="password" #passwordInput autocomplete="current-password" />
+              @if (form.controls.password.touched && form.controls.password.invalid) {
+                <mat-error>Password must be at least 6 characters.</mat-error>
+              }
+            </mat-form-field>
             <div class="actions">
               <button mat-flat-button type="button" (click)="signIn()">Sign In</button>
               <button mat-stroked-button type="button" (click)="signUp()">Sign Up</button>
@@ -52,6 +64,8 @@ export class Login {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   readonly message = signal('');
+  private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('emailInput');
+  private readonly passwordInput = viewChild<ElementRef<HTMLInputElement>>('passwordInput');
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(6)]],
@@ -84,7 +98,14 @@ export class Login {
   }
 
   private async submit(action: (email: string, password: string) => Promise<unknown>, success: string): Promise<void> {
-    if (this.form.invalid) return;
+    this.adoptAutofilledValues();
+    if (this.form.invalid) {
+      // Returning silently here meant a click did nothing at all — no message, no field
+      // highlight — which is indistinguishable from a broken button.
+      this.form.markAllAsTouched();
+      this.message.set(this.validationMessage());
+      return;
+    }
     const { email, password } = this.form.getRawValue();
     try {
       await action(email, password);
@@ -92,5 +113,27 @@ export class Login {
     } catch (error) {
       this.message.set(error instanceof Error ? error.message : 'Authentication failed.');
     }
+  }
+
+  /**
+   * Password managers and browser autofill frequently assign `input.value` directly without
+   * dispatching an input event, so the FormControl stays empty while the text is plainly
+   * visible on screen. The form then fails validation and the user watches a filled-in form
+   * refuse to submit. Adopt whatever the DOM actually holds before validating.
+   */
+  private adoptAutofilledValues(): void {
+    const patch: { email?: string; password?: string } = {};
+    const email = this.emailInput()?.nativeElement.value ?? '';
+    const password = this.passwordInput()?.nativeElement.value ?? '';
+    if (email && !this.form.controls.email.value) patch.email = email;
+    if (password && !this.form.controls.password.value) patch.password = password;
+    if (patch.email !== undefined || patch.password !== undefined) this.form.patchValue(patch);
+  }
+
+  private validationMessage(): string {
+    if (this.form.controls.email.invalid) return 'Enter a valid email address.';
+    if (this.form.controls.password.hasError('required')) return 'Enter a password.';
+    if (this.form.controls.password.hasError('minlength')) return 'Password must be at least 6 characters.';
+    return 'Check the form and try again.';
   }
 }
