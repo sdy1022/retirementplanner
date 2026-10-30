@@ -25,6 +25,13 @@ and this project uses [Conventional Commits](https://www.conventionalcommits.org
   the shortfall is sold — with its own basis tracking, since that path realizes gains — which
   brings the same case to -$1,795,186 and states plainly that the bucket cannot fund the plan
   either way. Exhausting the collateral is reported as a fact rather than an infinite ratio.
+- **dashboard:** Stop the BBD stress test reading as a broken cap. After the loan brake
+  landed, the demo still showed "Fail (421%)" beside "limit 50%", which a regression review
+  reasonably read as the cap not holding. It is holding — from year 3 the credit line
+  advances nothing — but forced sales then shrink the collateral while the debt stands, so
+  the ratio climbs on a vanishing denominator. The selector now reports
+  `bbdCollateralExhausted` and the dashboard shows "Fail — collateral exhausted" instead of
+  a number that cannot mean what its label says.
 - **dashboard:** Reword the drain-down advice. It described a bracket *ceiling* as a target
   ("must be drawn down to exactly $9,891,414"), which read as nonsense against the demo's
   $1.5M pre-tax balance. The arithmetic was right; the sentence was not.

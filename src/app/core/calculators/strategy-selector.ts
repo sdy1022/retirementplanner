@@ -55,6 +55,13 @@ export interface StrategySelectorResult {
   bbdFeasible: boolean;
   /** Worst stressed loan-to-value reached over the horizon */
   peakStressedLtv: number;
+  /**
+   * True when forced sales consumed the whole brokerage while the loan was still
+   * outstanding. peakStressedLtv is then a ratio against a vanishing denominator — it
+   * climbs because the collateral is being sold off, not because anything was lent past
+   * the cap — so callers should report the exhaustion rather than print the number.
+   */
+  bbdCollateralExhausted: boolean;
   choice: StrategyChoice;
   notes: string[];
 }
@@ -111,16 +118,17 @@ export function selectStrategy(input: StrategySelectorInput): StrategySelectorRe
     bbdValue: bbd.value,
     bbdFeasible: bbd.feasible,
     peakStressedLtv: bbd.peakStressedLtv,
+    bbdCollateralExhausted: bbd.depleted,
     choice,
     notes,
   };
 }
 
-function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; feasible: boolean; peakStressedLtv: number; notes: string[] } {
+function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; feasible: boolean; peakStressedLtv: number; depleted: boolean; notes: string[] } {
   const notes: string[] = [];
   const years = Math.max(0, Math.floor(input.yearsToDeath));
   if (input.brokerageBalance <= 0 || years === 0) {
-    return { value: 0, feasible: false, peakStressedLtv: 0, notes: ['No brokerage balance (or no horizon) to hold for step-up — BBD not applicable.'] };
+    return { value: 0, feasible: false, peakStressedLtv: 0, depleted: false, notes: ['No brokerage balance (or no horizon) to hold for step-up — BBD not applicable.'] };
   }
 
   const riskPremium = input.riskPremium ?? DEFAULT_RISK_PREMIUM;
@@ -222,7 +230,7 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
     notes.push(`Note: the credit line hit its ${pct(maxLtv)} limit, so $${money(forcedSales)} of spending had to be funded by selling anyway — this is not a pure buy-borrow-die path.`);
   }
 
-  return { value, feasible, peakStressedLtv: roundCurrency(peakStressedLtv), notes };
+  return { value, feasible, peakStressedLtv: roundCurrency(peakStressedLtv), depleted: bbdDepleted, notes };
 }
 
 function pct(value: number): string {

@@ -120,7 +120,11 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
           <p class="verdict">{{ strategyVerdict() }}</p>
           <div class="metric"><span>Roth conversion value (P × Δrate)</span><strong>{{ strategyDecision().conversionValue | currency }}</strong></div>
           <div class="metric"><span>Buy-Borrow-Die value (borrow vs sell, at death)</span><strong>{{ strategyDecision().bbdValue | currency }}</strong></div>
-          <div class="metric"><span>BBD stress test (peak LTV after 40% crash, limit 50%)</span><strong>{{ strategyDecision().bbdFeasible ? 'Pass' : 'Fail' }} ({{ strategyDecision().peakStressedLtv * 100 | number: '1.0-0' }}%)</strong></div>
+          @if (strategyDecision().bbdCollateralExhausted) {
+            <div class="metric"><span>BBD stress test (peak LTV after 40% crash, limit 50%)</span><strong>Fail — collateral exhausted</strong></div>
+          } @else {
+            <div class="metric"><span>BBD stress test (peak LTV after 40% crash, limit 50%)</span><strong>{{ strategyDecision().bbdFeasible ? 'Pass' : 'Fail' }} ({{ strategyDecision().peakStressedLtv * 100 | number: '1.0-0' }}%)</strong></div>
+          }
           <ul class="advice-list">
             @for (note of strategyDecision().notes; track note) {
               <li>{{ note }}</li>

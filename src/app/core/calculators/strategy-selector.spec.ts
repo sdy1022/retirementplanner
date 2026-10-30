@@ -191,6 +191,22 @@ describe('BBD loan stays inside the lender\'s LTV cap', () => {
     expect(Number.isFinite(peakStressedLtv)).toBeTrue();
   });
 
+  it('flags collateral exhaustion so the UI shows that instead of a misleading ratio', () => {
+    // A regression review read the surviving 421% next to "limit 50%" as proof the cap was
+    // not working. It is working — from year 3 the credit line advances nothing — but the
+    // ratio keeps climbing because forced sales shrink the denominator. Callers need to be
+    // able to tell those two situations apart.
+    expect(selectStrategy(overReaching).bbdCollateralExhausted).toBeTrue();
+    expect(selectStrategy(wellCollateralised).bbdCollateralExhausted).toBeFalse();
+  });
+
+  it('never advances new credit once the line is at the cap', () => {
+    // The invariant the displayed ratio obscures: whatever the stressed number looks like,
+    // debt is never increased beyond maxLtv of the collateral standing behind it.
+    const { notes } = selectStrategy(overReaching);
+    expect(notes.some((n) => n.includes('hit its 50% limit'))).toBeTrue();
+  });
+
   it('keeps the borrow-vs-sell comparison within an order of magnitude of the account', () => {
     const { bbdValue } = selectStrategy(overReaching);
     // The old unbounded loan produced -$11.9M on a $500k account. The comparison is only
