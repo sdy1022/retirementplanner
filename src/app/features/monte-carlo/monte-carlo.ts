@@ -28,13 +28,13 @@ import { RetirementAgeSearchResult } from '../../core/calculators/retirement-age
             sequence-of-returns risk that iid sampling misses — with long-run compound growth matched to your assumed
             {{ scenario().assumedReturnRate * 100 | number: '1.0-1' }}% portfolio return ({{ (scenario().stockAllocation ?? 1) * 100 | number: '1.0-0' }}% stocks / {{ (1 - (scenario().stockAllocation ?? 1)) * 100 | number: '1.0-0' }}% bonds).
           </p>
-          @if (!isSmoothIncomeTarget()) {
-            <p class="strategy-note mc-error">
-              The current scenario uses the "{{ scenario().rothConversionStrategy.mode }}" strategy. Monte Carlo verification
-              currently supports smooth-income-target only — switch the strategy on the Scenario page to run it.
+          @if (isSearchStrategy()) {
+            <p class="strategy-note">
+              The "{{ scenario().rothConversionStrategy.mode }}" strategy is solved once against the deterministic plan;
+              every trial then replays that same schedule, so no trial benefits from knowing its own market path.
             </p>
-          } @else {
-            <p class="guardrail-toggle">
+          }
+          <p class="guardrail-toggle">
               <mat-checkbox [(ngModel)]="useGuardrail" [disabled]="running()">
                 Model adaptive spending: cut living expenses 10% and pause conversions when running &gt;20% behind
                 the deterministic plan, restore once back within 5%
@@ -99,7 +99,6 @@ import { RetirementAgeSearchResult } from '../../core/calculators/retirement-age
             @if (error()) {
               <p class="strategy-note mc-error">⚠️ {{ error() }}</p>
             }
-          }
         </mat-card-content>
       </mat-card>
     </section>
@@ -337,7 +336,12 @@ export class MonteCarlo {
   readonly progress = signal(0);
   readonly error = signal<string | null>(null);
   private lastSeed = 0;
-  readonly isSmoothIncomeTarget = computed(() => this.state.scenario().rothConversionStrategy.mode === 'smooth-income-target');
+  // Modes runScenario solves into a concrete schedule before the trials replay it; the
+  // rest are already concrete directives, so there is nothing to explain about them.
+  readonly isSearchStrategy = computed(() => {
+    const mode = this.state.scenario().rothConversionStrategy.mode;
+    return mode === 'auto-optimize' || mode === 'smooth-to-bracket' || mode === 'smooth-income-target';
+  });
   readonly finalAge = computed(() => this.result()?.assetsByAge.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
 
   // Smaller trial count than the main run — sensitivity is meant to be a quick, directional

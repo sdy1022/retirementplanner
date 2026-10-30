@@ -280,18 +280,18 @@ function createTrialRunner(
   guardrailOptions?: GuardrailOptions,
   longevityOptions?: StochasticLongevityOptions,
 ): () => TrialOutcome {
-  // 'none' is accepted alongside smooth-income-target so the strategy-comparison page can
-  // run a no-conversion variant against the same seed; runScenario's passthrough branch
-  // resolves it as-is. Other search modes remain unsupported here.
-  const mode = scenario.rothConversionStrategy.mode;
-  if (mode !== 'smooth-income-target' && mode !== 'none') {
-    throw new Error('Monte Carlo verification currently supports the smooth-income-target strategy (or "none" for a no-conversion comparison) only.');
-  }
-
+  // Every strategy mode is replayable here. runScenario resolves the search modes
+  // (auto-optimize, smooth-to-bracket, smooth-income-target) into a concrete winner on the
+  // deterministic plan and passes the rest through unchanged, so each trial replays a fixed
+  // directive rather than re-optimising with knowledge of its own market path.
+  //
+  // Note the two kinds of directive behave differently under sampling, and both are
+  // intentional: a fixed-amount conversion moves the same dollars every trial, while a
+  // fill-to-bracket rule adapts to whatever income that trial actually produced.
   const base = runScenario(scenario, accounts);
   const resolvedStrategy = base.resolvedStrategy;
   if (!resolvedStrategy) {
-    throw new Error('Could not resolve a concrete smooth-income-target strategy to simulate.');
+    throw new Error(`Could not resolve a concrete strategy to simulate for mode "${scenario.rothConversionStrategy.mode}".`);
   }
   const spendingOrder = base.resolvedSpendingOrder ?? scenario.spendingOrder;
   const allowPreRetirementConversions = base.resolvedAllowPreRetirementConversions ?? scenario.allowPreRetirementConversions;

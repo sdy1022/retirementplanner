@@ -198,6 +198,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
                   <th>Living Expenses</th>
                   <th>Marginal Bracket</th>
                   <th>Total Tax</th>
+                  <th>Taxable SS</th>
                   <th>Medicare (Base + IRMAA)</th>
                   <th>Funding Source</th>
                 </tr>
@@ -210,6 +211,7 @@ import { getRmdStartAge, UNIFORM_LIFETIME_DIVISORS } from '../../core/calculator
                     <td>{{ step.livingExpenses }}</td>
                     <td>{{ step.marginalBracket }}</td>
                     <td>{{ step.totalTax }}</td>
+                    <td [title]="step.ssDerivation">{{ step.taxableSs }}</td>
                     <td>{{ step.irmaa }}</td>
                     <td>{{ step.fundingSource }}</td>
                   </tr>
@@ -541,7 +543,30 @@ export class Dashboard {
   });
   readonly sblocWins = computed(() => this.sblocPeakLtv() <= this.sblocMaxLtv && this.sblocEdge() > 0);
   readonly planResult = computed(() => this.sblocWins() ? this.sblocResult() : this.result());
-  readonly actionPlan = computed(() => generateActionPlan(this.planResult(), this.state.scenario().filingStatus));
+  // Social Security taxability thresholds are fixed by statute, not indexed
+  private readonly ssBaseThreshold = computed(() =>
+    this.state.scenario().filingStatus === 'married_filing_jointly' ? 32000 : 25000);
+
+  readonly actionPlan = computed(() => {
+    const steps = generateActionPlan(this.planResult(), this.state.scenario().filingStatus);
+    const yearByAge = new Map(this.planResult().years.map((y) => [y.age, y]));
+    const base = this.ssBaseThreshold();
+    const money = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+    return steps.map((step) => {
+      const year = yearByAge.get(step.age);
+      const gross = year?.socialSecurityGross ?? 0;
+      const provisional = year?.provisionalIncome ?? 0;
+      const taxable = year?.taxableSocialSecurity ?? 0;
+      // Spelled out because a $0 here looks like a missing tax until you can see why:
+      // Roth withdrawals never enter AGI, so only half the benefit counts toward the test.
+      const ssDerivation = gross <= 0
+        ? 'No Social Security this year.'
+        : `Benefit ${money(gross)}. Provisional income = other ordinary income + half the benefit = ${money(provisional)}, `
+          + `${provisional <= base ? `at or under the ${money(base)} threshold, so none of it is taxable` : `over the ${money(base)} threshold, so ${money(taxable)} is taxable`}`
+          + `. Deductions applied: ${money(year?.totalDeduction ?? 0)}.`;
+      return { ...step, taxableSs: money(taxable), ssDerivation };
+    });
+  });
   readonly rmdStartAge = computed(() => getRmdStartAge(this.state.scenario().birthYear));
   readonly finalAge = computed(() => this.result().years.at(-1)?.age ?? this.state.scenario().lifeExpectancy);
   readonly resultAfterTax = computed(() => this.afterTaxEndingAssets(this.result()));
@@ -658,7 +683,8 @@ export class Dashboard {
     const yearFields: (keyof YearResult)[] = [
       'traditionalBalance', 'rothBalance', 'brokerageBalance', 'brokerageBasis',
       'rmd', 'conversion',
-      'taxableIncome', 'federalTax', 'stateTax', 'totalTax', 'irmaa', 'marginalRate',
+      'taxableIncome', 'socialSecurityGross', 'provisionalIncome', 'taxableSocialSecurity', 'totalDeduction',
+      'federalTax', 'stateTax', 'totalTax', 'irmaa', 'marginalRate',
       'livingExpenses',
       'expensesFromSs', 'expensesFromRmd', 'expensesFromTraditional',
       'expensesFromBrokerage', 'expensesFromRoth',

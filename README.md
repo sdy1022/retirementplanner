@@ -80,14 +80,21 @@ The core logic lives in `src/app/core/calculators/` as pure, immutable, unit-tes
 
 ## ðŸ“Œ Future Scope
 
-- IRMAA MAGI threshold detection and Medicare Part B/D surcharge modeling.
-- Social Security benefit taxability rules (up to 85% taxable via provisional income).
-- Married-filing-jointly support (tax tables currently cover single filers, 2026).
-- Persisting Monte Carlo results and historical calculation snapshots.
+Shipped since this list was written, and no longer limitations: IRMAA threshold detection
+with the two-year lookback and Medicare surcharge modeling; Social Security taxability via
+the provisional-income formula (0% / up to 50% / up to 85%), now with the working shown in
+the year-by-year table and the CSV export; married-filing-jointly tax tables alongside
+single, including the switch to single filing after a spouse's death.
+
+Still open:
+
+- Persisting Monte Carlo results and year-over-year calculation snapshots, so an annual
+  re-run can be compared against last year's instead of overwriting it.
+- Long-term care cost modeling (deliberately deferred; see the assumptions document).
 
 ## âš ï¸ Disclaimer
 
-This is a modeling tool, not financial or tax advice. Tax tables cover a single filing status and year, and projections depend entirely on the assumptions you enter. Consult a qualified professional before acting on any strategy.
+This is a modeling tool, not financial or tax advice. Tax tables cover single and married-filing-jointly for one tax year, and projections depend entirely on the assumptions you enter. Consult a qualified professional before acting on any strategy.
 
 ---
 

@@ -137,6 +137,17 @@ export interface YearResult {
   rmd: number;
   conversion: number;
   taxableIncome: number;
+  // How taxableIncome came about, so a reader can check it instead of trusting it. The
+  // $0-tax years late in a Roth-heavy plan look wrong until you can see that provisional
+  // income sat under the threshold: Roth withdrawals never enter AGI, so only half the
+  // Social Security counts, and below the base threshold none of the benefit is taxed.
+  socialSecurityGross?: number;
+  /** otherOrdinaryIncome + half the benefit — the input to the IRS taxability formula */
+  provisionalIncome?: number;
+  /** Portion of the benefit that actually entered taxableIncome (0%, up to 50%, up to 85%) */
+  taxableSocialSecurity?: number;
+  /** Standard deduction plus any 65+/OBBBA senior deduction applied this year */
+  totalDeduction?: number;
   federalTax: number;
   stateTax: number;
   totalTax: number;

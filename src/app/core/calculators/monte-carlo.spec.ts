@@ -1,4 +1,4 @@
-import { Scenario } from '../models/retirement.models';
+import { RothConversionStrategy, Scenario } from '../models/retirement.models';
 import { runMonteCarloSmoothIncomeTarget } from './monte-carlo';
 
 describe('monte-carlo', () => {
@@ -22,12 +22,16 @@ describe('monte-carlo', () => {
     { type: 'brokerage' as const, balance: 500000, snapshotDate: '2026-01-01' },
   ];
 
-  it('rejects unsupported strategy modes but accepts "none" for no-conversion comparisons', () => {
-    // Search modes other than smooth-income-target are still unsupported
+  it('accepts every strategy mode, including the search modes it resolves first', () => {
+    // This used to reject anything but smooth-income-target, which meant a strategy the
+    // tool itself recommended (auto-optimize, via "Max Ending Assets") could not be stress
+    // tested. runScenario resolves search modes into a concrete schedule and passes the
+    // rest through, so all of them replay fine.
     const fixedAmount: Scenario = { ...wellFundedScenario, rothConversionStrategy: { mode: 'fixed-amount', amount: 50000 } };
-    expect(() => runMonteCarloSmoothIncomeTarget(fixedAmount, wellFundedAccounts, 10, 1)).toThrow();
-    // 'none' must run: the strategy-comparison page uses it as the no-conversion variant
-    // (this used to throw, breaking that page's advertised comparison at runtime)
+    expect(() => runMonteCarloSmoothIncomeTarget(fixedAmount, wellFundedAccounts, 10, 1)).not.toThrow();
+
+    // 'none' matters specifically: the strategy-comparison page uses it as the
+    // no-conversion variant against the same seed.
     const noConversion: Scenario = { ...wellFundedScenario, rothConversionStrategy: { mode: 'none' } };
     const result = runMonteCarloSmoothIncomeTarget(noConversion, wellFundedAccounts, 50, 1);
     expect(result.trials).toBe(50);
@@ -184,5 +188,57 @@ describe('monte-carlo', () => {
     expect(thin.failureStats).toBeDefined();
     expect(thin.failureStats!.medianShortfall).toBeGreaterThan(0);
     expect(thin.failureStats!.p90Shortfall).toBeGreaterThanOrEqual(thin.failureStats!.medianShortfall);
+  });
+});
+
+describe('every conversion strategy can be Monte Carlo verified', () => {
+  const wellFundedScenario: Scenario = {
+    name: 'Income ceiling', currentAge: 60, retirementAge: 60, birthYear: 1966,
+    ssClaimAge: 67, ssPia: 2800, lifeExpectancy: 90, filingStatus: 'single',
+    rothConversionStrategy: { mode: 'smooth-income-target', targetBracket: 0.24 },
+    assumedReturnRate: 0.06, stateTaxRate: 0.03, wageIncome: 0, annualLivingExpenses: 40000,
+  };
+  const wellFundedAccounts = [
+    { type: 'traditional_401k' as const, balance: 2000000, snapshotDate: '2026-01-01' },
+    { type: 'brokerage' as const, balance: 500000, snapshotDate: '2026-01-01' },
+  ];
+
+  // The runner used to accept only smooth-income-target (later also 'none'), so the tool
+  // could recommend a strategy — "Max Ending Assets" picks auto-optimize — that the user
+  // then had no way to stress test. runScenario resolves the search modes into a concrete
+  // winner and passes the rest through, so all of them are replayable; the guard was
+  // historical rather than a real constraint.
+  const strategies: RothConversionStrategy[] = [
+    { mode: 'none' },
+    { mode: 'fixed-amount', amount: 50_000 },
+    { mode: 'fill-to-bracket', targetBracket: 0.22 },
+    { mode: 'smooth-to-bracket', targetBracket: 0.24 },
+    { mode: 'fill-to-income', targetIncome: 150_000 },
+    { mode: 'smooth-income-target', targetBracket: 0.24 },
+    { mode: 'auto-optimize' },
+  ];
+
+  for (const strategy of strategies) {
+    it(`runs trials for "${strategy.mode}" and returns a well-formed result`, () => {
+      const result = runMonteCarloSmoothIncomeTarget(
+        { ...wellFundedScenario, rothConversionStrategy: strategy },
+        wellFundedAccounts,
+        40,
+        5,
+      );
+      expect(result.trials).toBe(40);
+      expect(result.successProbability).toBeGreaterThanOrEqual(0);
+      expect(result.successProbability).toBeLessThanOrEqual(1);
+      expect(result.assetsByAge.length).toBeGreaterThan(0);
+    });
+  }
+
+  it('still replays one fixed schedule per run rather than re-optimising inside trials', () => {
+    // The no-hindsight property the docs claim: same seed, same inputs, same answer.
+    const a = runMonteCarloSmoothIncomeTarget(
+      { ...wellFundedScenario, rothConversionStrategy: { mode: 'auto-optimize' } }, wellFundedAccounts, 60, 9);
+    const b = runMonteCarloSmoothIncomeTarget(
+      { ...wellFundedScenario, rothConversionStrategy: { mode: 'auto-optimize' } }, wellFundedAccounts, 60, 9);
+    expect(a).toEqual(b);
   });
 });

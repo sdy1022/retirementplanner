@@ -1,4 +1,6 @@
 import { simulateConversionStrategy } from './roth-conversion-calculator';
+import { runScenario } from './scenario-engine';
+import { AccountSnapshot, Scenario } from '../models/retirement.models';
 
 describe('roth-conversion-calculator', () => {
   it('keeps baseline conversion at zero', () => {
@@ -222,4 +224,43 @@ describe('roth-conversion-calculator', () => {
     expect(years.map((year) => year.livingExpenses)).toEqual([50000, 51500, 53045]);
   });
 
+});
+
+describe('Social Security taxability is reported, not just applied', () => {
+  // A review flagged $0 total tax at ages 75-90 as possibly a missing tax. The engine was
+  // right — Roth withdrawals never enter AGI, so only half the benefit counts toward the
+  // provisional-income test — but nothing in the output let a reader check that. These
+  // fields exist so the zero is auditable rather than taken on trust.
+  const accounts: AccountSnapshot[] = [
+    { type: 'roth_ira', balance: 3_000_000, snapshotDate: '2026-01-01' },
+  ];
+  const scenario: Scenario = {
+    name: 'roth only', currentAge: 75, retirementAge: 75, birthYear: 1951,
+    ssClaimAge: 67, ssPia: 4000, lifeExpectancy: 80,
+    filingStatus: 'married_filing_jointly',
+    rothConversionStrategy: { mode: 'none' },
+    assumedReturnRate: 0.05, stateTaxRate: 0, wageIncome: 0,
+    annualLivingExpenses: 200_000, ssColaRate: 0,
+  };
+
+  it('publishes the provisional-income working behind a zero tax year', () => {
+    const year = runScenario(scenario, accounts).years[0];
+    expect(year.socialSecurityGross).toBeGreaterThan(0);
+    // Spending comes from Roth, which is not ordinary income, so provisional income is
+    // essentially half the benefit.
+    expect(year.provisionalIncome).toBeCloseTo(year.socialSecurityGross! / 2, 0);
+    expect(year.provisionalIncome).toBeLessThan(32_000);
+    expect(year.taxableSocialSecurity).toBe(0);
+    expect(year.totalTax).toBe(0);
+  });
+
+  it('taxes exactly half the excess once provisional income crosses the MFJ threshold', () => {
+    // The 50% band: above $32,000 and below $44,000, each extra dollar of provisional
+    // income makes 50 cents of the benefit taxable.
+    const justOver: Scenario = { ...scenario, ssPia: 5500 };
+    const year = runScenario(justOver, accounts).years[0];
+    const excess = year.provisionalIncome! - 32_000;
+    expect(excess).toBeGreaterThan(0);
+    expect(year.taxableSocialSecurity).toBeCloseTo(excess * 0.5, 0);
+  });
 });

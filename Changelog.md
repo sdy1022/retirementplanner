@@ -7,6 +7,22 @@ and this project uses [Conventional Commits](https://www.conventionalcommits.org
 
 ## [Unreleased]
 
+### Features
+
+- **monte-carlo:** Verify any conversion strategy, not just smooth-income-target. The runner
+  rejected every other mode, so a strategy the tool itself recommended — "Max Ending Assets"
+  resolves to auto-optimize — could not be stress tested at all. `runScenario` already
+  resolves the search modes into a concrete schedule and passes the rest through, so the
+  guard was historical rather than a real constraint. All seven modes now run, and the page
+  explains that search modes are solved once against the deterministic plan and replayed, so
+  no trial benefits from knowing its own market path.
+- **dashboard:** Show the Social Security taxability working. A review read $0 total tax at
+  ages 75–90 as a possible missing tax; the engine was right, but nothing in the output let
+  anyone check it. `YearResult` now carries the benefit, the provisional income, the taxable
+  portion and the deductions applied; the year-by-year table gains a Taxable SS column whose
+  tooltip spells out the comparison against the statutory threshold, and all four fields are
+  in the CSV export.
+
 ### Bug Fixes
 
 - **scenario:** Stop the plan's numbers changing when nothing was edited. The Scenario
