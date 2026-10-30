@@ -134,12 +134,19 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
   let sellBasis = Math.min(input.brokerageCostBasis, input.brokerageBalance);
   let sellPathDepleted = false;
 
-  // Borrow path: assets untouched, debt compounds and funds the same spending
+  // Borrow path: hold the shares, draw on the SBLOC for spending, and sell only what the
+  // credit line cannot cover. Basis is tracked here too, because once the line is capped
+  // this path starts realizing gains exactly like the sell path.
   let bbdBalance = input.brokerageBalance;
+  let bbdBasis = Math.min(input.brokerageCostBasis, input.brokerageBalance);
   let debt = 0;
   let peakStressedLtv = 0;
   // Largest paydown needed to get back under the LTV cap in the stressed scenario
   let maxCureNeeded = 0;
+  // Spending the credit line could not fund, so it had to be sold after all
+  let forcedSales = 0;
+  // Set when forced sales consume the whole account while the loan is still outstanding
+  let bbdDepleted = false;
 
   for (let year = 1; year <= years; year++) {
     const gainFraction = sellBalance > 0 ? Math.max(0, sellBalance - sellBasis) / sellBalance : 0;
@@ -150,16 +157,42 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
     sellBasis = Math.max(0, sellBasis - withdrawal * (1 - gainFraction));
     sellBalance = (sellBalance - withdrawal) * (1 + input.expectedReturnRate);
 
-    debt = debt * (1 + effectiveBorrowRate) + input.annualSpending;
+    // Interest accrues on the existing balance before this year's draw
+    debt = debt * (1 + effectiveBorrowRate);
+    // A real lender stops advancing at the LTV cap. Without this brake the loan compounds
+    // past any collateral it could possibly be secured by — on a $500k account funding
+    // $150k/yr for 30 years it reached ~$15M, a 563% LTV no broker would ever extend —
+    // which made the headline "BBD value" a number with no counterpart in reality.
+    const borrowCapacity = Math.max(0, maxLtv * bbdBalance - debt);
+    const borrowed = Math.min(input.annualSpending, borrowCapacity);
+    debt += borrowed;
+
+    const shortfall = input.annualSpending - borrowed;
+    if (shortfall > 0 && bbdBalance > 0) {
+      const bbdGainFraction = Math.max(0, bbdBalance - bbdBasis) / bbdBalance;
+      const bbdTaxOnGain = bbdGainFraction * input.capitalGainsRate;
+      const bbdGross = bbdTaxOnGain < 1 ? shortfall / (1 - bbdTaxOnGain) : bbdBalance;
+      const sold = Math.min(bbdBalance, bbdGross);
+      bbdBasis = Math.max(0, bbdBasis - sold * (1 - bbdGainFraction));
+      bbdBalance -= sold;
+      forcedSales += sold;
+    }
+
     bbdBalance = bbdBalance * (1 + input.expectedReturnRate);
     const stressedCollateral = bbdBalance * (1 - stressDrawdown);
-    const stressedLtv = debt / stressedCollateral;
-    peakStressedLtv = Math.max(peakStressedLtv, stressedLtv);
-    maxCureNeeded = Math.max(maxCureNeeded, debt - maxLtv * stressedCollateral);
+    if (stressedCollateral > 0) {
+      peakStressedLtv = Math.max(peakStressedLtv, debt / stressedCollateral);
+      maxCureNeeded = Math.max(maxCureNeeded, debt - maxLtv * stressedCollateral);
+    } else if (debt > 0) {
+      // Collateral fully consumed while the loan is still outstanding. A loan-to-value
+      // ratio against nothing is not a number worth printing — record the fact instead.
+      bbdDepleted = true;
+      maxCureNeeded = Math.max(maxCureNeeded, debt);
+    }
   }
   const backstop = Math.max(0, input.backstopLiquidAssets ?? 0);
   const curedByBackstop = maxCureNeeded > 0 && maxCureNeeded <= backstop;
-  const feasible = maxCureNeeded <= 0 || curedByBackstop;
+  const feasible = !bbdDepleted && (maxCureNeeded <= 0 || curedByBackstop);
 
   // Step-up at death wipes unrealized gains on both paths, so estates compare directly
   const sellEstate = sellBalance;
@@ -167,7 +200,11 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
   const value = roundCurrency(bbdEstate - sellEstate);
 
   if (!feasible) {
-    notes.push(`BBD infeasible: stressed LTV peaks at ${pct(peakStressedLtv)} (limit ${pct(maxLtv)} after a ${pct(stressDrawdown)} crash), and curing the margin call would take $${money(maxCureNeeded)} — more than the $${money(backstop)} backstop available.`);
+    if (bbdDepleted) {
+      notes.push(`BBD not available: this spending exhausts the brokerage before death even with the credit line, leaving $${money(maxCureNeeded)} of debt against no collateral. The bucket is too small to fund this plan by borrowing or selling.`);
+    } else {
+      notes.push(`BBD infeasible: stressed LTV peaks at ${pct(peakStressedLtv)} (limit ${pct(maxLtv)} after a ${pct(stressDrawdown)} crash), and curing the margin call would take $${money(maxCureNeeded)} — more than the $${money(backstop)} backstop available.`);
+    }
   } else {
     if (curedByBackstop) {
       notes.push(`Caution: stressed LTV peaks at ${pct(peakStressedLtv)} (over the ${pct(maxLtv)} limit). BBD stays feasible only because up to $${money(maxCureNeeded)} of Roth/cash backstop could cure the margin call — a cure spends tax-free dollars to prop up leverage.`);
@@ -180,6 +217,9 @@ function simulateBrokeragePaths(input: StrategySelectorInput): { value: number; 
   }
   if (sellPathDepleted) {
     notes.push('Warning: the sell path exhausts the brokerage before death — spending exceeds what this bucket can fund either way.');
+  }
+  if (forcedSales > 0) {
+    notes.push(`Note: the credit line hit its ${pct(maxLtv)} limit, so $${money(forcedSales)} of spending had to be funded by selling anyway — this is not a pure buy-borrow-die path.`);
   }
 
   return { value, feasible, peakStressedLtv: roundCurrency(peakStressedLtv), notes };

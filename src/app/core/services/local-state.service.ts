@@ -1,5 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { AccountSnapshot, Scenario } from '../models/retirement.models';
+import { DEFAULT_SS_COLA_RATE } from '../calculators/roth-conversion-calculator';
+import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../calculators/scenario-engine';
 
 const defaultAccounts: AccountSnapshot[] = [];
 
@@ -105,6 +107,16 @@ export class LocalStateService {
       wageIncome: 100000,
       annualOtherIncome: 0,
       annualLivingExpenses: 150000,
+      // Set explicitly rather than left undefined: the Scenario Builder writes a value for
+      // every field when you press Run Scenario, so a demo that omits one would silently
+      // shift the moment the form was opened — the whole plan's numbers changing with no
+      // edit made. Keep this list in step with the form's optional fields.
+      dividendYield: 0.015,
+      ssColaRate: DEFAULT_SS_COLA_RATE,
+      residualTaxRate: RESIDUAL_TRADITIONAL_TAX_RATE,
+      brokerageGainsTaxRate: 0,
+      allowPreRetirementConversions: false,
+      annualWageGrowth: 0,
     };
 
     this.setAccounts(sampleAccounts);

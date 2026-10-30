@@ -81,6 +81,11 @@ const EXPENSE_INFLATION_RATE = 0.03;
 // simulation's first year unless the scenario overrides it.
 export const DEFAULT_SS_COLA_RATE = 0.025;
 
+// Portion of the brokerage return paid out as taxable dividends. Zero means the scenario
+// has not opted into dividend modeling. Exported so the UI's "unset" default is this exact
+// value: a form that fills a different number silently changes results the moment it opens.
+export const DEFAULT_DIVIDEND_YIELD = 0;
+
 // Traditional withdrawals up to the top of this bracket are cheap; harvest that space
 // for living expenses before touching brokerage or Roth
 const LOW_BRACKET_HARVEST_RATE = 0.12;
@@ -232,7 +237,7 @@ export function simulateConversionStrategy(input: ConversionSimulationInput): Ye
     // Dividends are a slice of the total return that gets taxed annually even when
     // reinvested; the reinvestment raises cost basis after the year's growth is applied.
     // All dividends are treated as qualified (taxed at capital-gains rates).
-    const dividends = roundCurrency(brokerageBalance * (input.dividendYield ?? 0));
+    const dividends = roundCurrency(brokerageBalance * (input.dividendYield ?? DEFAULT_DIVIDEND_YIELD));
     const dividendStateTax = roundCurrency(dividends * input.stateTaxRate);
     // Senior deductions (the 65+ additional standard deduction, plus the OBBBA enhanced
     // deduction through 2028, phased out on MAGI) shrink the ordinary income fed to the

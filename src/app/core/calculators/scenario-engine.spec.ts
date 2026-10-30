@@ -1,5 +1,6 @@
-import { runScenario } from './scenario-engine';
-import { Scenario } from '../models/retirement.models';
+import { runScenario, RESIDUAL_TRADITIONAL_TAX_RATE } from './scenario-engine';
+import { DEFAULT_DIVIDEND_YIELD, DEFAULT_SS_COLA_RATE } from './roth-conversion-calculator';
+import { AccountSnapshot, Scenario } from '../models/retirement.models';
 
 describe('scenario-engine', () => {
   it('returns a deterministic scenario summary', () => {
@@ -805,5 +806,56 @@ describe('scenario-engine', () => {
       expect(result.years[1].taxFromBrokerage).toBe(341.7);
       expect(result.years[1].sblocLoanBalance).toBe(417.3);
     });
+  });
+});
+
+describe('UI defaults must match engine defaults (baseline-stability guard)', () => {
+  // An external review found the plan's numbers changing with no edit made: opening the
+  // Scenario Builder and pressing Run Scenario wrote a value into every field, and the
+  // form's dividend-yield default (1.5%) disagreed with the engine's (0%). A demo scenario
+  // that left the field unset therefore produced one set of numbers before the form was
+  // opened and another after — total tax $510,922.79 -> $515,920.78 on the shipped demo.
+  //
+  // Fields that shared a named constant between form and engine never drifted; the one
+  // that repeated a literal in both places did. This pins the rule: an unset optional
+  // field must simulate identically to that field set to the constant the UI shows.
+  const accounts: AccountSnapshot[] = [
+    { type: 'traditional_401k', balance: 1_000_000, snapshotDate: '2026-01-01' },
+    { type: 'brokerage', balance: 500_000, snapshotDate: '2026-01-01' },
+  ];
+  const scenario: Scenario = {
+    name: 'defaults', currentAge: 60, retirementAge: 60, birthYear: 1966,
+    ssClaimAge: 67, ssPia: 3300, lifeExpectancy: 90,
+    filingStatus: 'married_filing_jointly',
+    rothConversionStrategy: { mode: 'none' },
+    assumedReturnRate: 0.06, stateTaxRate: 0.0495,
+    wageIncome: 0, annualLivingExpenses: 120_000,
+  };
+
+  it('an unset dividendYield simulates the same as DEFAULT_DIVIDEND_YIELD', () => {
+    const unset = runScenario(scenario, accounts);
+    const explicit = runScenario({ ...scenario, dividendYield: DEFAULT_DIVIDEND_YIELD }, accounts);
+    expect(explicit.totalTax).toBe(unset.totalTax);
+    expect(explicit.endingAssets).toBe(unset.endingAssets);
+  });
+
+  it('an unset ssColaRate simulates the same as DEFAULT_SS_COLA_RATE', () => {
+    const unset = runScenario(scenario, accounts);
+    const explicit = runScenario({ ...scenario, ssColaRate: DEFAULT_SS_COLA_RATE }, accounts);
+    expect(explicit.totalTax).toBe(unset.totalTax);
+    expect(explicit.endingAssets).toBe(unset.endingAssets);
+  });
+
+  it('an unset residualTaxRate simulates the same as RESIDUAL_TRADITIONAL_TAX_RATE', () => {
+    const unset = runScenario(scenario, accounts);
+    const explicit = runScenario({ ...scenario, residualTaxRate: RESIDUAL_TRADITIONAL_TAX_RATE }, accounts);
+    expect(explicit.endingAssets).toBe(unset.endingAssets);
+  });
+
+  it('a non-default dividend yield really does move the numbers (guards the guard)', () => {
+    // If this ever stops differing, the tests above would pass vacuously.
+    const unset = runScenario(scenario, accounts);
+    const withDividends = runScenario({ ...scenario, dividendYield: 0.015 }, accounts);
+    expect(withDividends.totalTax).not.toBe(unset.totalTax);
   });
 });

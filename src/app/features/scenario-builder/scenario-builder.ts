@@ -11,7 +11,7 @@ import { RothConversionStrategy, Scenario } from '../../core/models/retirement.m
 import { RESIDUAL_TRADITIONAL_TAX_RATE } from '../../core/calculators/scenario-engine';
 import { ScenarioService } from '../../core/services/scenario.service';
 import { AuthService } from '../../core/services/auth.service';
-import { DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-calculator';
+import { DEFAULT_DIVIDEND_YIELD, DEFAULT_SS_COLA_RATE } from '../../core/calculators/roth-conversion-calculator';
 
 @Component({
   selector: 'app-scenario-builder',
@@ -159,7 +159,7 @@ export class ScenarioBuilder {
     residualTaxRate: [this.state.scenario().residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE],
     allowPreRetirementConversions: [this.state.scenario().allowPreRetirementConversions ?? false],
     brokerageGainsTaxRate: [this.state.scenario().brokerageGainsTaxRate ?? 0],
-    dividendYield: [this.state.scenario().dividendYield ?? 0.015],
+    dividendYield: [this.state.scenario().dividendYield ?? DEFAULT_DIVIDEND_YIELD],
     filingStatus: [this.state.scenario().filingStatus, Validators.required],
     conversionMode: [this.state.scenario().rothConversionStrategy.mode, Validators.required],
     fixedAmount: [this.state.scenario().rothConversionStrategy.mode === 'fixed-amount' ? (this.state.scenario().rothConversionStrategy as any).amount : 25000],
@@ -270,7 +270,7 @@ export class ScenarioBuilder {
           residualTaxRate: scenario.residualTaxRate ?? RESIDUAL_TRADITIONAL_TAX_RATE,
           allowPreRetirementConversions: scenario.allowPreRetirementConversions ?? false,
           brokerageGainsTaxRate: scenario.brokerageGainsTaxRate ?? 0,
-          dividendYield: scenario.dividendYield ?? 0.015,
+          dividendYield: scenario.dividendYield ?? DEFAULT_DIVIDEND_YIELD,
           filingStatus: scenario.filingStatus,
           conversionMode: scenario.rothConversionStrategy.mode,
           fixedAmount: scenario.rothConversionStrategy.mode === 'fixed-amount' ? (scenario.rothConversionStrategy as any).amount : 25000,

@@ -610,12 +610,12 @@ export class Dashboard {
       const actualRmdStartYear = res.years.find(y => y.age === rmdStartAge);
       const actualBalance = actualRmdStartYear ? actualRmdStartYear.traditionalBalance : 0;
 
-      let adviceMsg = `🎯 Target Drain-Down: To stay within the ${Math.round(targetBracket * 100)}% bracket when RMDs begin at age ${rmdStartAge}, your Traditional balance must be drawn down to exactly ${formatCurrency(maxBalance)} by that age.`;
+      let adviceMsg = `🎯 Bracket headroom: RMDs starting at age ${rmdStartAge} stay inside the ${Math.round(targetBracket * 100)}% bracket as long as your Traditional balance is at or below ${formatCurrency(maxBalance)} by that age. This is a ceiling, not a target — being far under it is fine.`;
 
       if (actualBalance > maxBalance) {
-        adviceMsg += ` Your projected balance at age ${rmdStartAge} is ${formatCurrency(actualBalance)}, which exceeds this safe limit by ${formatCurrency(actualBalance - maxBalance)}. You need to convert more aggressively between now and age ${rmdStartAge}. Consider raising your target bracket (e.g., to 24% or 32%) in the Scenario Builder.`;
+        adviceMsg += ` Your projected balance at age ${rmdStartAge} is ${formatCurrency(actualBalance)}, which exceeds this ceiling by ${formatCurrency(actualBalance - maxBalance)}. You need to convert more aggressively between now and age ${rmdStartAge}. Consider raising your target bracket (e.g., to 24% or 32%) in the Scenario Builder.`;
       } else {
-        adviceMsg += ` Your projected balance at age ${rmdStartAge} is ${formatCurrency(actualBalance)}, so you are safely under the limit!`;
+        adviceMsg += ` Your projected balance at age ${rmdStartAge} is ${formatCurrency(actualBalance)}, comfortably under it — RMDs are not what pushes you out of this bracket.`;
       }
       advices.push(adviceMsg);
     }

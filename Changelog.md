@@ -9,6 +9,26 @@ and this project uses [Conventional Commits](https://www.conventionalcommits.org
 
 ### Bug Fixes
 
+- **scenario:** Stop the plan's numbers changing when nothing was edited. The Scenario
+  Builder writes a value for every field on Run Scenario, and its dividend-yield default
+  (1.5%) disagreed with the engine's (0%), so a scenario that left the field unset — the
+  shipped demo among them — produced one set of results before the form was opened and
+  another after: total tax $510,922.79 → $515,920.78, ending assets $1,488,896.02 →
+  $1,414,410.49. Both sides now share `DEFAULT_DIVIDEND_YIELD`, the demo sets its optional
+  fields explicitly, and specs pin that an unset optional field simulates identically to the
+  constant the UI shows. Fields that already shared a named constant never drifted; the one
+  that repeated a literal in two places did.
+- **strategy-selector:** Stop the Buy-Borrow-Die comparison lending past its own collateral.
+  The loan compounded unchecked while the main engine's SBLOC correctly caps draws at
+  `maxLtv`, so a $500k brokerage funding $150k/yr for 30 years reached ~$15M of debt, a 563%
+  stressed LTV, and a headline "BBD value" of -$11,961,153. Draws now stop at the LTV cap and
+  the shortfall is sold — with its own basis tracking, since that path realizes gains — which
+  brings the same case to -$1,795,186 and states plainly that the bucket cannot fund the plan
+  either way. Exhausting the collateral is reported as a fact rather than an infinite ratio.
+- **dashboard:** Reword the drain-down advice. It described a bracket *ceiling* as a target
+  ("must be drawn down to exactly $9,891,414"), which read as nonsense against the demo's
+  $1.5M pre-tax balance. The arithmetic was right; the sentence was not.
+
 - **cloud-sync:** Add migration `0007_sync_scenario_columns.sql` and persist the columns the
   client already wrote. Saving a scenario failed with `PGRST204` once the Scenario Builder had
   been submitted, because `annual_pre_tax_contribution`, `annual_roth_contribution`,

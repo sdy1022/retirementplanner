@@ -150,3 +150,62 @@ describe('selectStrategy', () => {
     expect(result.notes.some(n => n.includes('exhausts the brokerage'))).toBeTrue();
   });
 });
+
+describe('BBD loan stays inside the lender\'s LTV cap', () => {
+  // The shape an external review flagged: a small brokerage asked to fund large spending
+  // for a long horizon. Before the brake, debt compounded past any collateral that could
+  // secure it — ~$15M against a $500k account, a 563% stressed LTV, and a headline "BBD
+  // value" of -$12M that no broker would ever have let happen.
+  const overReaching: StrategySelectorInput = {
+    pretaxBalance: 1_500_000,
+    brokerageBalance: 500_000,
+    brokerageCostBasis: 500_000,
+    conversionRate: 0.24,
+    exitRate: 0.24,
+    capitalGainsRate: 0.15,
+    borrowRate: 0.06,
+    expectedReturnRate: 0.08,
+    yearsToDeath: 30,
+    annualSpending: 150_000,
+  };
+
+  // Same rates, but collateral large enough that the line is never fully drawn.
+  const wellCollateralised: StrategySelectorInput = {
+    ...overReaching,
+    brokerageBalance: 3_000_000,
+    brokerageCostBasis: 750_000,
+    annualSpending: 90_000,
+  };
+
+  it('never reports a stressed LTV that implies lending past the collateral', () => {
+    const { peakStressedLtv } = selectStrategy(wellCollateralised);
+    // With draws capped at 50% of collateral, a 40% crash can push the ratio to at most
+    // 0.5 / (1 - 0.4) = 83%. Anything beyond that means the brake is not being applied.
+    expect(peakStressedLtv).toBeLessThanOrEqual(0.5 / 0.6 + 1e-9);
+  });
+
+  it('reports a finite ratio even when the account is drained to nothing', () => {
+    // A ratio against zero collateral is not a number worth printing; the depletion is
+    // reported as a fact instead.
+    const { peakStressedLtv } = selectStrategy(overReaching);
+    expect(Number.isFinite(peakStressedLtv)).toBeTrue();
+  });
+
+  it('keeps the borrow-vs-sell comparison within an order of magnitude of the account', () => {
+    const { bbdValue } = selectStrategy(overReaching);
+    // The old unbounded loan produced -$11.9M on a $500k account. The comparison is only
+    // meaningful while both paths stay anchored to assets that actually exist.
+    expect(Math.abs(bbdValue)).toBeLessThan(500_000 * 20);
+  });
+
+  it('says plainly that the bucket cannot fund the plan at all', () => {
+    const { bbdFeasible, notes } = selectStrategy(overReaching);
+    expect(bbdFeasible).toBeFalse();
+    expect(notes.some((n) => n.includes('exhausts the brokerage before death'))).toBeTrue();
+  });
+
+  it('still lets a well-collateralised plan borrow without forced sales', () => {
+    const { notes } = selectStrategy(wellCollateralised);
+    expect(notes.some((n) => n.includes('had to be funded by selling anyway'))).toBeFalse();
+  });
+});
